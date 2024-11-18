@@ -12,12 +12,14 @@ using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
-using static Il2Cpp.ReplayLoader;
+using System.Reflection;
+using System.Runtime.Serialization.Formatters.Binary;
 
 namespace ClassLibrary1
 {
     public class Leaderboard_Mod : MelonMod
     {
+
         private static DateTime lastRequestTime = DateTime.MinValue;
         //private static readonly Queue<Func<Task>> _executionQueue = new();
         private static readonly HttpClient httpClient = new();
@@ -68,6 +70,7 @@ namespace ClassLibrary1
        
             private static bool Prefix(int course, bool layout, bool night, int car)
             {
+                Melon<Leaderboard_Mod>.Logger.Msg("In prefix for leaderboard");
                 var instance = LeaderboardManager.instance;
 
                 if (instance == null)
@@ -374,148 +377,195 @@ namespace ClassLibrary1
         }
 
 
-        //[HarmonyPatch(typeof(ReplayLoader), "retrieveReplay")]
-        //private static class PatchRetrieveReplay
-        //{
-        //    private static readonly FieldInfo readHeaderField = AccessTools.Field(typeof(ReplayLoader), "readHeader");
-        //    private static readonly FieldInfo readDataField = AccessTools.Field(typeof(ReplayLoader), "readData");
-        //    private static readonly FieldInfo readingField = AccessTools.Field(typeof(ReplayLoader), "reading");
-        //    private static readonly FieldInfo readingCompleteField = AccessTools.Field(typeof(ReplayLoader), "readingComplete");
 
-        //    private static bool Prefix(ReplayLoader __instance, string recordID)
-        //    {
-        //        var instance = __instance;
+        // LOADING REPLAY STUFF //////////////////////////////////////////////////////////////////
 
-        //        // Access the readingComplete UnityEvent
-        //        var readingComplete = readingCompleteField.GetValue(instance) as UnityEvent;
+        static async Task<byte[]> SendHttpRequestForReplayAsync(string url)
+        {
+            try
+            {
+                using (HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, url))
+                {
+                    HttpResponseMessage response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
 
-        //        // Set 'reading' to true
-        //        readingField.SetValue(instance, true);
+                    if (response.IsSuccessStatusCode)
+                    {
+                        // Read the response content as a byte array
+                        byte[] replayData = await response.Content.ReadAsByteArrayAsync();
 
-        //        // Start the async task to fetch and process the replay
-        //        FetchAndProcessReplay(instance, recordID, readingComplete);
+                        MelonLogger.Msg($"Received replay data length: {replayData.Length}");
 
-        //        // Skip the original method
-        //        return false;
-        //    }
+                        return replayData;
+                    }
+                    else
+                    {
+                        MelonLogger.Error($"HTTP Error: {response.StatusCode}");
+                        return null;
+                    }
+                }
+            }
+            catch (HttpRequestException ex)
+            {
+                MelonLogger.Error($"HTTP Request Exception: {ex.Message}");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                MelonLogger.Error($"Unexpected exception in SendHttpRequestForReplayAsync: {ex.Message}");
+                return null;
+            }
+        }
 
-        //    private static void FetchAndProcessReplay(ReplayLoader instance, string recordID, UnityEvent readingComplete)
-        //    {
-        //        // Enqueue the task to the main thread
-        //        Leaderboard_Mod.Enqueue(async () =>
-        //        {
-        //            // Build the URL
-        //            string apiKey = "YOUR_ACTUAL_API_KEY"; // Replace with your API key
-        //            string url = $"https://yourapi.com/getReplay?id={recordID}&apiKey={apiKey}"; // Replace with your API URL
+        // Patch for viewOnlineReplay in LeaderboardManager
+        [HarmonyPatch(typeof(LeaderboardManager), "viewOnlineReplay")]
+        public static class PatchViewOnlineReplay
+        {
+            static bool Prefix(LeaderboardManager __instance, string recordID, int track, bool altLayout, bool night, float timing)
+            {
+                MelonLogger.Msg("viewOnlineReplay Prefix called.");
+                MelonLogger.Msg($"recordID: {recordID}, track: {track}, altLayout: {altLayout}, night: {night}, timing: {timing}");
 
-        //            byte[] replayData = null;
-        //            try
-        //            {
-        //                Melon<Leaderboard_Mod>.Logger.Msg("Sending request to retrieve replay...");
-        //                replayData = await SendHttpRequestForReplayAsync(url);
+                if (!__instance.timeAttackMenu.animating)
+                {
+                    __instance.timeAttackMenu.animating = true;
+                    AudioManager.singleton.playConfirm();
+                    ReplayLoader.replayToLoad = recordID;
+                    ReplayLoader.isReplay = true;
+                    ReplayLoader.isOnlineReplay = true;
+                    ReplayLoader.replayTiming = timing;
+                    EventLoader.isMultiplayer = false;
+                    EventLoader.night = night;
+                    EventLoader.reverseLayout = altLayout;
 
-        //                if (replayData == null)
-        //                {
-        //                    Melon<Leaderboard_Mod>.Logger.Error("Failed to retrieve replay data: responseData is null.");
-        //                    // Handle error: go back to main menu
-        //                    Enqueue(() =>
-        //                    {
-        //                        EventManager.singleton.goToMainMenu();
-        //                    });
-        //                    return;
-        //                }
-        //            }
-        //            catch (Exception ex)
-        //            {
-        //                Melon<Leaderboard_Mod>.Logger.Error($"Exception during Replay retrieval: {ex.Message}");
-        //                // Handle error: go back to main menu
-        //                Enqueue(() =>
-        //                {
-        //                    EventManager.singleton.goToMainMenu();
-        //                });
-        //                return;
-        //            }
+                    // Fade to black and load the track scene
+                    Blocker.fadeToBlack();
+                    // Assuming fadeToBlack is synchronous; if not, ensure that the scene loads after the fade
+                    var tracks = SelectionManager.singleton.tracks;
+                    AssetLoader.LoadScene("tracks/" + tracks[track].name, tracks[track].crc);
+                }
 
-        //            // Now, process the replay data on a separate thread
-        //            Task.Run(() =>
-        //            {
-        //                ProcessReplayData(instance, replayData);
+                return false; // Skip the original method
+            }
+        }
 
-        //                // Once processing is complete, invoke readingComplete on the main thread
-        //                Enqueue(() =>
-        //                {
-        //                    readingComplete?.Invoke();
-        //                });
-        //            });
-        //        });
-        //    }
+        // Patch for ReplayLoader's Start method
+        [HarmonyPatch(typeof(ReplayLoader), "Start")]
+        public static class PatchReplayLoaderStart
+        {
+            static void Postfix(ReplayLoader __instance)
+            {
+                MelonLogger.Msg("ReplayLoader Start method called.");
 
-        //    private static async Task<byte[]> SendHttpRequestForReplayAsync(string url)
-        //    {
-        //        try
-        //        {
-        //            using (HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, url))
-        //            {
-        //                // Send the HTTP request
-        //                HttpResponseMessage response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+                if (ReplayLoader.isOnlineReplay)
+                {
+                    MelonLogger.Msg("Custom replay loading initiated.");
 
-        //                if (response.IsSuccessStatusCode)
-        //                {
-        //                    byte[] data = await response.Content.ReadAsByteArrayAsync();
-        //                    return data;
-        //                }
-        //                else
-        //                {
-        //                    Melon<Leaderboard_Mod>.Logger.Error($"HTTP Error: {response.StatusCode}");
-        //                    return null;
-        //                }
-        //            }
-        //        }
-        //        catch (HttpRequestException ex)
-        //        {
-        //            Melon<Leaderboard_Mod>.Logger.Error($"HTTP Request Exception: {ex.Message}");
-        //            return null;
-        //        }
-        //        catch (Exception ex)
-        //        {
-        //            Melon<Leaderboard_Mod>.Logger.Error($"Unexpected exception in SendHttpRequestForReplayAsync: {ex.Message}");
-        //            return null;
-        //        }
-        //    }
+                    // Proceed to fetch and load the replay data from your API
+                    FetchAndLoadReplayData(__instance, ReplayLoader.replayToLoad);
+                }
+            }
 
-        //    private static void ProcessReplayData(ReplayLoader instance, byte[] replayData)
-        //    {
-        //        try
-        //        {
-        //            // Deserialize the replay data
-        //            using (MemoryStream memoryStream = new MemoryStream(replayData))
-        //            {
-        //                BinaryFormatter binaryFormatter = new BinaryFormatter();
+            static async void FetchAndLoadReplayData(ReplayLoader replayLoader, string recordID)
+            {
+                // Build your API URL
+                string apiKey = "YOUR_API_KEY"; // Replace with your API key
+                string url = "https://initialunity.online/getGhost/?id=1936733";
 
-        //                // Deserialize the NetworkReplay object
-        //                ReplayLoader.NetworkReplay networkReplay = (ReplayLoader.NetworkReplay)binaryFormatter.Deserialize(memoryStream);
+                byte[] replayData = null;
+                try
+                {
+                    replayData = await SendHttpRequestForReplayAsync(url);
 
-        //                // Decompress the data
-        //                var readHeader = networkReplay.header;
-        //                var readData = (ReplayLoader.ReplayData)networkReplay.compressedData.getDecompressedObject();
+                    if (replayData == null)
+                    {
+                        MelonLogger.Error("Failed to retrieve replay data: responseData is null.");
+                        Enqueue(() => EventManager.singleton.goToMainMenu());
+                        return;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Error($"Exception during Replay retrieval: {ex.Message}");
+                    Enqueue(() => EventManager.singleton.goToMainMenu());
+                    return;
+                }
 
-        //                // Set the fields via reflection
-        //                readHeaderField.SetValue(instance, readHeader);
-        //                readDataField.SetValue(instance, readData);
-        //                readingField.SetValue(instance, false);
-        //            }
-        //        }
-        //        catch (Exception ex)
-        //        {
-        //            Melon<Leaderboard_Mod>.Logger.Error($"Exception during replay data processing: {ex.Message}");
-        //            // Handle error: go back to main menu
-        //            Enqueue(() =>
-        //            {
-        //                EventManager.singleton.goToMainMenu();
-        //            });
-        //        }
-        //    }
-        //}
+                // Process the replay data
+                ProcessReplayData(replayLoader, replayData);
+
+                // Invoke readingComplete on the main thread
+                Enqueue(() =>
+                {
+                    replayLoader.readingComplete?.Invoke();
+                });
+            }
+
+            static async Task<byte[]> SendHttpRequestForReplayAsync(string url)
+            {
+                try
+                {
+                    using (HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, url))
+                    {
+                        // Send the HTTP request
+                        HttpResponseMessage response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+
+                        if (response.IsSuccessStatusCode)
+                        {
+                            // Read the response content as a byte array
+                            byte[] data = await response.Content.ReadAsByteArrayAsync();
+                            return data;
+                        }
+                        else
+                        {
+                            MelonLogger.Error($"HTTP Error: {response.StatusCode}");
+                            return null;
+                        }
+                    }
+                }
+                catch (HttpRequestException ex)
+                {
+                    MelonLogger.Error($"HTTP Request Exception: {ex.Message}");
+                    return null;
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Error($"Unexpected exception in SendHttpRequestForReplayAsync: {ex.Message}");
+                    return null;
+                }
+            }
+
+            static void ProcessReplayData(ReplayLoader instance, byte[] replayData)
+            {
+                try
+                {
+                    using (MemoryStream memoryStream = new MemoryStream(replayData))
+                    {
+                        BinaryFormatter binaryFormatter = new BinaryFormatter();
+
+                        // Deserialize the NetworkReplay object
+                        var networkReplay = (ReplayLoader.NetworkReplay)binaryFormatter.Deserialize(memoryStream);
+
+                        // Decompress the data
+                        var readHeader = networkReplay.header;
+                        var readData = (ReplayLoader.ReplayData)networkReplay.compressedData.getDecompressedObject();
+
+                        // Set the fields via reflection
+                        var readHeaderField = AccessTools.Field(typeof(ReplayLoader), "readHeader");
+                        var readDataField = AccessTools.Field(typeof(ReplayLoader), "readData");
+                        var readingField = AccessTools.Field(typeof(ReplayLoader), "reading");
+
+                        readHeaderField.SetValue(instance, readHeader);
+                        readDataField.SetValue(instance, readData);
+                        readingField.SetValue(instance, false);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Error($"Exception during replay data processing: {ex.Message}");
+                    Enqueue(() => EventManager.singleton.goToMainMenu());
+                }
+            }
+        }
     }
 
     // Define the LeaderboardRecord class
