@@ -1,5 +1,6 @@
 ﻿using HarmonyLib;
 using Il2Cpp;
+using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using MelonLoader;
 using Newtonsoft.Json;
 using System;
@@ -8,16 +9,17 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using static Il2Cpp.ReplayLoader;
 
 namespace ClassLibrary1
 {
     public class Leaderboard_Mod : MelonMod
     {
         private static DateTime lastRequestTime = DateTime.MinValue;
-        private static readonly TimeSpan requestInterval = TimeSpan.FromSeconds(0.1);
-        private static readonly Queue<Func<Task>> _executionQueue = new();
+        //private static readonly Queue<Func<Task>> _executionQueue = new();
         private static readonly HttpClient httpClient = new();
         private static CancellationTokenSource cts = new();
 
@@ -27,7 +29,7 @@ namespace ClassLibrary1
             Melon<Leaderboard_Mod>.Logger.Msg("Leaderboard_Mod initialized.");
         }
 
-        // In the Enqueue method and task execution
+        //Enqueue method and task execution
         public override void OnUpdate()
         {
             lock (_executionQueue)
@@ -37,18 +39,7 @@ namespace ClassLibrary1
                     var action = _executionQueue.Dequeue();
                     try
                     {
-                        // Start the task and handle exceptions
-                        var task = action?.Invoke();
-                        if (task != null)
-                        {
-                            task.ContinueWith(t =>
-                            {
-                                if (t.Exception != null)
-                                {
-                                    Melon<Leaderboard_Mod>.Logger.Error($"Exception in enqueued task: {t.Exception}");
-                                }
-                            }, TaskContinuationOptions.OnlyOnFaulted);
-                        }
+                        action?.Invoke();
                     }
                     catch (Exception ex)
                     {
@@ -58,8 +49,9 @@ namespace ClassLibrary1
             }
         }
 
+        private static readonly Queue<Action> _executionQueue = new();
 
-        public static void Enqueue(Func<Task> action)
+        public static void Enqueue(Action action)
         {
             if (action == null)
                 return;
@@ -69,7 +61,6 @@ namespace ClassLibrary1
                 _executionQueue.Enqueue(action);
             }
         }
-
 
         [HarmonyPatch(typeof(LeaderboardManager), "retrieveLeaderboardDelayed")]
         private static class PatchRetrieveLeaderboard
@@ -119,14 +110,6 @@ namespace ClassLibrary1
                 Leaderboard_Mod.Enqueue(async () =>
                 {
                     var cancellationToken = localCts.Token;
-
-                    // Rate limit check
-                    var delay = lastRequestTime + requestInterval - DateTime.UtcNow;
-                    if (delay > TimeSpan.Zero)
-                    {
-                        Melon<Leaderboard_Mod>.Logger.Msg($"Waiting on leaderboard retrieval for {delay.TotalSeconds} seconds due to rate limiting");
-                        await Task.Delay(delay, cancellationToken);
-                    }
 
                     if (cancellationToken.IsCancellationRequested)
                     {
@@ -231,25 +214,25 @@ namespace ClassLibrary1
                 {
                     using (HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, url))
                     {
-                        // Pass the cancellation token to SendAsync
-                        HttpResponseMessage response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-
-                        if (response.IsSuccessStatusCode)
+                        HttpResponseMessage response = null;
+                        // Wait a bit and see if it got cancelled, puts a cap of one request per half second
+                        await Task.Delay(500);
+                        if (!cancellationToken.IsCancellationRequested)
                         {
-                            // Read content only if not canceled
-                            if (!cancellationToken.IsCancellationRequested)
+                            Melon<Leaderboard_Mod>.Logger.Msg("Sending request!");
+                            response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken); if (response.IsSuccessStatusCode)
                             {
                                 string responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
                                 return responseBody;
                             }
                             else
                             {
+                                Melon<Leaderboard_Mod>.Logger.Error($"HTTP Error: {response.StatusCode}");
                                 return null;
                             }
                         }
                         else
                         {
-                            Melon<Leaderboard_Mod>.Logger.Error($"HTTP Error: {response.StatusCode}");
                             return null;
                         }
                     }
@@ -335,10 +318,10 @@ namespace ClassLibrary1
                         bool replayCondition = record.condition == 1;
                         float timing = record.timing;
 
-                        //gameObject.GetComponent<Button>().onClick.AddListener(() =>
-                        //{
-                        //    instance.viewOnlineReplay(recordID, replayTrack, layoutBool, replayCondition, timing);
-                        //});
+                        gameObject.GetComponent<Button>().onClick.AddListener((UnityEngine.Events.UnityAction)(() =>
+                        {
+                            instance.viewOnlineReplay(recordID, replayTrack, layoutBool, replayCondition, timing);
+                        }));
                     }
                     catch (Exception ex)
                     {
@@ -360,7 +343,6 @@ namespace ClassLibrary1
                     FocusOnEntry(instance);
                 }
             }
-
 
 
             private static void UpdateEntryNavigation(Button[] entries)
@@ -390,6 +372,150 @@ namespace ClassLibrary1
             }
 
         }
+
+
+        //[HarmonyPatch(typeof(ReplayLoader), "retrieveReplay")]
+        //private static class PatchRetrieveReplay
+        //{
+        //    private static readonly FieldInfo readHeaderField = AccessTools.Field(typeof(ReplayLoader), "readHeader");
+        //    private static readonly FieldInfo readDataField = AccessTools.Field(typeof(ReplayLoader), "readData");
+        //    private static readonly FieldInfo readingField = AccessTools.Field(typeof(ReplayLoader), "reading");
+        //    private static readonly FieldInfo readingCompleteField = AccessTools.Field(typeof(ReplayLoader), "readingComplete");
+
+        //    private static bool Prefix(ReplayLoader __instance, string recordID)
+        //    {
+        //        var instance = __instance;
+
+        //        // Access the readingComplete UnityEvent
+        //        var readingComplete = readingCompleteField.GetValue(instance) as UnityEvent;
+
+        //        // Set 'reading' to true
+        //        readingField.SetValue(instance, true);
+
+        //        // Start the async task to fetch and process the replay
+        //        FetchAndProcessReplay(instance, recordID, readingComplete);
+
+        //        // Skip the original method
+        //        return false;
+        //    }
+
+        //    private static void FetchAndProcessReplay(ReplayLoader instance, string recordID, UnityEvent readingComplete)
+        //    {
+        //        // Enqueue the task to the main thread
+        //        Leaderboard_Mod.Enqueue(async () =>
+        //        {
+        //            // Build the URL
+        //            string apiKey = "YOUR_ACTUAL_API_KEY"; // Replace with your API key
+        //            string url = $"https://yourapi.com/getReplay?id={recordID}&apiKey={apiKey}"; // Replace with your API URL
+
+        //            byte[] replayData = null;
+        //            try
+        //            {
+        //                Melon<Leaderboard_Mod>.Logger.Msg("Sending request to retrieve replay...");
+        //                replayData = await SendHttpRequestForReplayAsync(url);
+
+        //                if (replayData == null)
+        //                {
+        //                    Melon<Leaderboard_Mod>.Logger.Error("Failed to retrieve replay data: responseData is null.");
+        //                    // Handle error: go back to main menu
+        //                    Enqueue(() =>
+        //                    {
+        //                        EventManager.singleton.goToMainMenu();
+        //                    });
+        //                    return;
+        //                }
+        //            }
+        //            catch (Exception ex)
+        //            {
+        //                Melon<Leaderboard_Mod>.Logger.Error($"Exception during Replay retrieval: {ex.Message}");
+        //                // Handle error: go back to main menu
+        //                Enqueue(() =>
+        //                {
+        //                    EventManager.singleton.goToMainMenu();
+        //                });
+        //                return;
+        //            }
+
+        //            // Now, process the replay data on a separate thread
+        //            Task.Run(() =>
+        //            {
+        //                ProcessReplayData(instance, replayData);
+
+        //                // Once processing is complete, invoke readingComplete on the main thread
+        //                Enqueue(() =>
+        //                {
+        //                    readingComplete?.Invoke();
+        //                });
+        //            });
+        //        });
+        //    }
+
+        //    private static async Task<byte[]> SendHttpRequestForReplayAsync(string url)
+        //    {
+        //        try
+        //        {
+        //            using (HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, url))
+        //            {
+        //                // Send the HTTP request
+        //                HttpResponseMessage response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+
+        //                if (response.IsSuccessStatusCode)
+        //                {
+        //                    byte[] data = await response.Content.ReadAsByteArrayAsync();
+        //                    return data;
+        //                }
+        //                else
+        //                {
+        //                    Melon<Leaderboard_Mod>.Logger.Error($"HTTP Error: {response.StatusCode}");
+        //                    return null;
+        //                }
+        //            }
+        //        }
+        //        catch (HttpRequestException ex)
+        //        {
+        //            Melon<Leaderboard_Mod>.Logger.Error($"HTTP Request Exception: {ex.Message}");
+        //            return null;
+        //        }
+        //        catch (Exception ex)
+        //        {
+        //            Melon<Leaderboard_Mod>.Logger.Error($"Unexpected exception in SendHttpRequestForReplayAsync: {ex.Message}");
+        //            return null;
+        //        }
+        //    }
+
+        //    private static void ProcessReplayData(ReplayLoader instance, byte[] replayData)
+        //    {
+        //        try
+        //        {
+        //            // Deserialize the replay data
+        //            using (MemoryStream memoryStream = new MemoryStream(replayData))
+        //            {
+        //                BinaryFormatter binaryFormatter = new BinaryFormatter();
+
+        //                // Deserialize the NetworkReplay object
+        //                ReplayLoader.NetworkReplay networkReplay = (ReplayLoader.NetworkReplay)binaryFormatter.Deserialize(memoryStream);
+
+        //                // Decompress the data
+        //                var readHeader = networkReplay.header;
+        //                var readData = (ReplayLoader.ReplayData)networkReplay.compressedData.getDecompressedObject();
+
+        //                // Set the fields via reflection
+        //                readHeaderField.SetValue(instance, readHeader);
+        //                readDataField.SetValue(instance, readData);
+        //                readingField.SetValue(instance, false);
+        //            }
+        //        }
+        //        catch (Exception ex)
+        //        {
+        //            Melon<Leaderboard_Mod>.Logger.Error($"Exception during replay data processing: {ex.Message}");
+        //            // Handle error: go back to main menu
+        //            Enqueue(() =>
+        //            {
+        //                EventManager.singleton.goToMainMenu();
+        //            });
+        //        }
+        //    }
+        //}
     }
 
     // Define the LeaderboardRecord class
