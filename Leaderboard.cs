@@ -3,51 +3,32 @@
 using HarmonyLib;
 using Il2Cpp;
 using MelonLoader;
-using System;
-using System.Collections.Generic;
-using System.Net.Http;
-using System.Threading;
-using System.Threading.Tasks;
 using UnityEngine;
 using System.Text;
 using System.Text.Json;
-using System.IO;
-using System.Runtime.Serialization.Formatters.Binary;
-using System.Linq;
 using UnityEngine.Networking;
-using static MelonLoader.MelonLogger;
 
 namespace ModNamespace
 {
     public partial class CustomLeaderboardAndReplayMod : MelonMod
     {
-        private const string BASE_LEADERBOARD_API_ADDRESS = "https://o2hm4g1w50.execute-api.us-east-1.amazonaws.com/prod";
-        private const string WRITE_RECORD_SUBADDRESS = "/writeRecord";
 
-
-        // Patches UnityWebRequest to add the API key to untouched requests
+        // Patches UnityWebRequest to add the API key and change the request address
         [HarmonyPatch(typeof(UnityWebRequest), "SendWebRequest")]
-        public static class UnityWebRequestAPIKeyPatch
+        public static class PatchUnityWebRequest
         {
             static void Prefix(UnityWebRequest __instance)
             {
-                MelonLogger.Msg($"In prefix, url is {__instance.url}");
-                __instance.SetRequestHeader("x-api-key", API_KEY);
-                // Example: Replace specific URL with a custom one
-                if (__instance.url.Equals("https://initialunity.online/postRecord"))
+                __instance.SetRequestHeader(Constants.ApiKeyHeader, Constants.ApiKey);
+
+                // Replace original URL with new one
+                if (__instance.url.Equals(Constants.OldWriteRecordAddress))
                 {
-                    __instance.url = __instance.url.Replace("https://initialunity.online/postRecord", "https://o2hm4g1w50.execute-api.us-east-1.amazonaws.com/prod/writeRecord");
-                    MelonLogger.Msg($"Modified URL: {__instance.url}");
+                    __instance.url = __instance.url.Replace(Constants.OldWriteRecordAddress, Constants.NewWriteRecordAddress);
                 }
-                else if (__instance.url.StartsWith("https://initialunity.online/getRecords"))
+                else if (__instance.url.StartsWith(Constants.OldGetRecordsAddress))
                 {
-                    __instance.url = __instance.url.Replace("https://initialunity.online/getRecords", "https://o2hm4g1w50.execute-api.us-east-1.amazonaws.com/prod/getRecords");
-                    MelonLogger.Msg($"Modified URL: {__instance.url}");
-                }
-                else if (__instance.url.StartsWith("https://initialunity.online/getGhost"))
-                {
-                    __instance.url = "https://dyyukzzk19.execute-api.us-east-1.amazonaws.com/prod/getGhost";
-                    MelonLogger.Msg($"Modified URL: {__instance.url}");
+                    __instance.url = __instance.url.Replace(Constants.OldGetRecordsAddress, Constants.NewGetRecordsAddress);
                 }
             }
         }
@@ -55,12 +36,11 @@ namespace ModNamespace
 
         // Patch ghostSavedAndPrepped() with custom logic for uploading leaderboard record and replay
         [HarmonyPatch(typeof(EventManager), "ghostSavedAndPrepped")]
-        public static class EventManagerPatch
+        public static class PatchGhostSavedAndPrepped
         {
             static bool Prefix(EventManager __instance)
             {
                 var replayData = ReplayLoader.instance.getPreparedReplay();
-                Melon<CustomLeaderboardAndReplayMod>.Logger.Msg("IN PREFIX FOR EVENT MANAGER GHOSTSAVEDANDPREPPED");
 
                 if (!__instance.carController.isTrollCar && AntiWallride.systemEnabled)
                 {
@@ -108,8 +88,8 @@ namespace ModNamespace
         {
             try
             {
-                var request = new HttpRequestMessage(HttpMethod.Post, BASE_LEADERBOARD_API_ADDRESS + WRITE_RECORD_SUBADDRESS);
-                request.Headers.Add("x-api-key", API_KEY);
+                var request = new HttpRequestMessage(HttpMethod.Post, Constants.NewWriteRecordAddress);
+                request.Headers.Add(Constants.ApiKeyHeader, Constants.ApiKey);
 
                 // Set the request content
                 request.Content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
@@ -131,7 +111,6 @@ namespace ModNamespace
                             if (doc.RootElement.TryGetProperty("s3_url", out JsonElement s3UrlElement))
                             {
                                 string s3Url = s3UrlElement.GetString();
-                                Melon<CustomLeaderboardAndReplayMod>.Logger.Msg($"Presigned S3 URL: {s3Url}");
                                 return s3Url;
                             }
                             else
@@ -178,12 +157,12 @@ namespace ModNamespace
 
                 if (response.IsSuccessStatusCode)
                 {
-                    Melon<CustomLeaderboardAndReplayMod>.Logger.Msg("Replay data successfully uploaded to S3.");
+                    Melon<CustomLeaderboardAndReplayMod>.Logger.Msg("Replay data successfully uploaded.");
                 }
                 else
                 {
                     string errorBody = await response.Content.ReadAsStringAsync();
-                    Melon<CustomLeaderboardAndReplayMod>.Logger.Error($"Failed to upload replay data to S3: {response.StatusCode}, Details: {errorBody}");
+                    Melon<CustomLeaderboardAndReplayMod>.Logger.Error($"Failed to upload replay data: {response.StatusCode}, Details: {errorBody}");
                 }
             }
             catch (Exception ex)

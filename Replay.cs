@@ -2,60 +2,147 @@
 
 using HarmonyLib;
 using Newtonsoft.Json;
-using System;
-using System.Collections.Generic;
-using System.Net.Http;
-using System.Text;
-using System.Threading.Tasks;
 using UnityEngine;
-using UnityEngine.Events;
 using MelonLoader;
 using Il2Cpp;
-using static Il2Cpp.StartCamera;
-using static MelonLoader.MelonLogger;
-
+using static Il2Cpp.ReplayLoader;
+using static ModNamespace.ReplayConversionUtils;
 namespace ModNamespace
 {
     public partial class CustomLeaderboardAndReplayMod : MelonMod
     {
-        public static string uploadReplayJson;
 
-        [HarmonyPatch(typeof(ReplayLoader), "finishReplayInit")]
-        public class LBMPatch
+        [HarmonyPatch(typeof(ReplayLoader), "saveReplay")]
+        public class PatchSaveReplay
         {
-            public static void Prefix(ReplayLoader __instance)
+            public static bool Prefix(ReplayLoader __instance, bool saveAsGhost, string folder, int replaySlicesCount)
             {
-                // Print Replay Header
-                MelonLogger.Msg($"Replay Header:");
-                MelonLogger.Msg($"Version: {__instance.readHeader.version}");
-                MelonLogger.Msg($"Date: {__instance.readHeader.date}");
-                MelonLogger.Msg($"Is Battle: {__instance.readHeader.isBattle}");
-                MelonLogger.Msg($"Replay Duration: {__instance.readHeader.replayDuration}");
-                MelonLogger.Msg($"Track: {__instance.readHeader.track}");
-                MelonLogger.Msg($"Alt Layout: {__instance.readHeader.altLayout}");
-                MelonLogger.Msg($"Night: {__instance.readHeader.night}");
+                ReplayLoader.checkForFolder(folder);
 
-                // Print Cars in Replay Header
-                foreach (var car in __instance.readHeader.cars)
+                // Check if there are tracked cars in the replay system
+                if (ReplaySystem.singleton.trackedCars.Count == 0)
                 {
-                    MelonLogger.Msg($"Car Model: {car.model}, Driver: {car.driver}");
+                    return false; // Skip original method
                 }
 
-                // Print Replay Data
-                MelonLogger.Msg($"Replay Data:");
-                for (int i = 0; i < __instance.readData.timeslices.Count; i++)
+                // Extract replay details
+                float timeStamp = ReplaySystem.singleton.trackedCars[0].timeSlices[replaySlicesCount - 1].timeStamp;
+                ReplayHeader replayHeader = new ReplayHeader(
+                    2,
+                    Il2CppSystem.DateTime.Now,
+                    EventManager.singleton.isMultiplayer,
+                    timeStamp,
+                    EventLoader.singleton.localeName,
+                    EventManager.singleton.reverse,
+                    Weather.singleton.night
+                );
+
+                // Add car information to replay header
+                for (int i = 0; i < ReplaySystem.singleton.trackedCars.Count; i++)
                 {
-                    MelonLogger.Msg($"Car {i + 1} Time Slices:");
-                    foreach (var timeSlice in __instance.readData.timeslices[i])
+                    replayHeader.cars.Add(new Car(ReplaySystem.singleton.trackedCars[i].model, ReplaySystem.singleton.trackedCars[i].driver));
+                }
+
+                // Create ReplayData and populate it with time slices
+                ReplayData replayData = new();
+                for (int j = 0; j < ReplaySystem.singleton.trackedCars.Count; j++)
+                {
+                    replayData.timeslices.Add(ReplaySystem.singleton.trackedCars[j].timeSlices.GetRange(0, replaySlicesCount));
+                }
+
+                NetworkReplay networkReplay = new()
+                {
+                    header = ConvertReplayHeaderToDTO(replayHeader),
+                    replayData = ConvertReplayDataToDTO(replayData)
+                };
+
+                // Serialize the NetworkReplay to JSON
+                string jsonReplay = JsonConvert.SerializeObject(networkReplay, Formatting.Indented);
+
+                // Create a NetworkReplay structure if saving as a ghost
+                if (saveAsGhost)
+                {
+                    // Assign serialized JSON to the static field in CustomLeaderboardAndReplayMod
+                    uploadReplayJson = jsonReplay;
+                }
+
+                // Generate a replay filename based on event details
+                string replayFileName = GenerateReplayFileName(folder, saveAsGhost);
+
+                
+                // Write JSON to file
+                string fullPath = Utils.getRootFolder() + folder + "/" + replayFileName + ".iureplay";
+                MelonLogger.Msg($"Writing replay to file at {fullPath}");
+                File.WriteAllText(fullPath, jsonReplay);
+                MelonLogger.Msg("Done writing");
+
+                // Update saving state
+                __instance.saving = false;
+
+                return false; // Skip original method
+            }
+
+            // Helper method to generate replay file name
+            private static string GenerateReplayFileName(string folder, bool saveAsGhost)
+            {
+                string fileName = EventManager.singleton.eventStartDate.ToString("dd.M.yyyy-HH.mm") + " ";
+                if (!EventManager.singleton.isMultiplayer)
+                {
+                    fileName += "Time Attack - ";
+                    fileName += ReplaySystem.singleton.trackedCars[0].model;
+                    fileName += " at ";
+                    fileName += EventLoader.singleton.localeName;
+                }
+                else
+                {
+                    fileName += "Battle - ";
+                    fileName = fileName + ReplaySystem.singleton.trackedCars[0].driver + " vs " + ReplaySystem.singleton.trackedCars[1].driver;
+                    fileName += " at ";
+                    fileName += EventLoader.singleton.localeName;
+                }
+
+                if (saveAsGhost)
+                {
+                    fileName = "Ghost - ";
+                    fileName += ReplaySystem.singleton.trackedCars[0].model;
+                    fileName += " at ";
+                    fileName += EventLoader.singleton.localeName;
+                    if (EventLoader.reverseLayout)
                     {
-                        MelonLogger.Msg($"Timestamp: {timeSlice.timeStamp}, Position: ({timeSlice.position.x}, {timeSlice.position.y}, {timeSlice.position.z}), Velocity: ({timeSlice.velocity.x}, {timeSlice.velocity.y}, {timeSlice.velocity.z})");
+                        fileName += " reverse";
                     }
                 }
+
+                return fileName;
             }
+
+            // Conversion method from ReplayHeader to ReplayHeaderDTO
+            private static ReplayHeaderDTO ConvertReplayHeaderToDTO(ReplayHeader header)
+            {
+                var carsDtoList = new List<CarDTO>();
+                foreach (var car in header.cars)
+                {
+                    carsDtoList.Add(new CarDTO { model = car.model, driver = car.driver });
+                }
+
+                return new ReplayHeaderDTO
+                {
+                    version = header.version,
+                    date = new System.DateTime(header.date.Ticks),
+                    isBattle = header.isBattle,
+                    replayDuration = header.replayDuration,
+                    track = header.track,
+                    altLayout = header.altLayout,
+                    night = header.night,
+                    cars = carsDtoList
+                };
+            }
+
         }
 
+
         [HarmonyPatch(typeof(ReplayLoader), "initReplayMode")]
-        public class ReplayModePatch
+        public class PatchInitReplayMode
         {
             public static bool Prefix(ReplayLoader __instance)
             {
@@ -73,61 +160,74 @@ namespace ModNamespace
                 __instance.freeCam.enabled = true;
                 __instance.editorActivator.enabled = true;
 
+                MelonLogger.Msg("About to be there...");
                 if (ReplayLoader.isOnlineReplay)
                 {
-                    Task.Run(() => DownloadReplayJson(__instance));
+                    Task.Run(() => DownloadOnlineReplayJson(__instance));
                 }
                 else
                 {
-                    __instance.readReplayAsync(new Action(__instance.finishReplayInit), ReplayLoader.replayToLoad);
+                    MelonLogger.Msg("in the right place!");
+                    MelonLogger.Msg(ReplayLoader.replayToLoad);
+                    DownloadLocalReplayJson(__instance);
                 }
 
-                return false; // Skip the original method
+                return false;
             }
 
-            // Update DownloadReplayJson to use the correct conversion method
-            private static async Task DownloadReplayJson(ReplayLoader instance)
+
+            private static void DownloadLocalReplayJson(ReplayLoader instance)
             {
-                // Construct the URL to download the replay JSON
-                string requestUrl = "https://o2hm4g1w50.execute-api.us-east-1.amazonaws.com/prod/getGhost";
-                using (HttpClient httpClient = new HttpClient())
+                try
+                {
+                    // Read the content of the replay file
+                    string fileContent = File.ReadAllText(ReplayLoader.replayToLoad);
+
+                    // Deserialize JSON to NetworkReplayDTO
+                    NetworkReplay networkReplay = JsonConvert.DeserializeObject<NetworkReplay>(fileContent);
+
+                    // Convert DTO to ReplayHeader and ReplayData
+                    instance.readHeader = ConvertDTOToIl2CppReplayHeader(networkReplay.header);
+                    instance.readData = ConvertDTOToIl2CppReplayData(networkReplay.replayData);
+
+                    MelonLogger.Msg("Local replay deserialized successfully, invoking finishReplayInit...");
+                    instance.finishReplayInit();
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Msg($"Exception while deserializing local replay JSON: {ex.Message}");
+                    EventManager.singleton.goToMainMenu();
+                }
+            }
+
+
+            private static async Task DownloadOnlineReplayJson(ReplayLoader instance)
+            {
+                string requestUrl = Constants.NewGetGhostAddress + ReplayLoader.replayToLoad;
+                using (HttpClient httpClient = new())
                 {
                     try
                     {
-                        HttpResponseMessage response = await httpClient.GetAsync(requestUrl);
-                        if (response.IsSuccessStatusCode)
+                        HttpResponseMessage presignedUrlResponse = await httpClient.GetAsync(requestUrl);
+                        if (presignedUrlResponse.IsSuccessStatusCode)
                         {
-                            string jsonResponse = await response.Content.ReadAsStringAsync();
-                            NetworkReplay networkReplay = JsonConvert.DeserializeObject<NetworkReplay>(jsonResponse);
+                            string presignedS3Url = await presignedUrlResponse.Content.ReadAsStringAsync();
+                            HttpResponseMessage replayResponse = await httpClient.GetAsync(presignedS3Url);
+                            if (replayResponse.IsSuccessStatusCode) {
+                                string responseJson = await replayResponse.Content.ReadAsStringAsync();
+                                
+                                NetworkReplay networkReplay = JsonConvert.DeserializeObject<NetworkReplay>(responseJson);
 
-                            // Log the deserialized ReplayHeaderDTO, particularly the car list
-                            MelonLogger.Msg("Deserialized ReplayHeaderDTO:");
-                            MelonLogger.Msg($"Version: {networkReplay.header.version}");
-                            MelonLogger.Msg($"Cars Count: {networkReplay.header.cars.Count}");
-                            foreach (var car in networkReplay.header.cars)
-                            {
-                                MelonLogger.Msg($"Car Model: {car.model}, Driver: {car.driver}");
-                            }
-
-                            // Debugging deserialized data
-                            foreach (var timeSliceList in networkReplay.replayData.timeslices)
-                            {
-                                foreach (var timeSlice in timeSliceList)
+                                // Enqueue the action to update the replay data on the main thread
+                                CustomLeaderboardAndReplayMod.Enqueue(() =>
                                 {
-                                    //MelonLogger.Msg($"Deserialized TimeSliceDTO - Timestamp: {timeSlice.timeStamp}, Position: ({timeSlice.position.x}, {timeSlice.position.y}, {timeSlice.position.z})");
-                                }
-                            }
+                                    instance.readHeader = ConvertReplayHeaderDTOToIl2Cpp(networkReplay.header);
+                                    instance.readData = ConvertReplayDataDTOToIl2Cpp(networkReplay.replayData);
 
-                            // Enqueue the action to update the replay data on the main thread
-                            CustomLeaderboardAndReplayMod.Enqueue(() =>
-                            {
-                                instance.readHeader = ConvertDTOToReplayHeader(networkReplay.header);
-                                instance.readData = ConvertReplayDataDTOToIl2Cpp(networkReplay.replayData);
-
-                                MelonLogger.Msg("invoking finishReplayInit");
-                                // Invoke the finishReplayInit method to proceed with the original flow
-                                instance.finishReplayInit();
-                            });
+                                    // Invoke the finishReplayInit method to proceed with the original flow
+                                    instance.finishReplayInit();
+                                });
+                             }
                         }
                         else
                         {
@@ -149,98 +249,72 @@ namespace ModNamespace
                 }
             }
 
-            // Method to convert ReplayDataDTO to Il2Cpp ReplayData
-            private static ReplayLoader.ReplayData ConvertReplayDataDTOToIl2Cpp(ReplayDataDTO dto)
+        }
+
+        [HarmonyPatch(typeof(ReplayLoader), "getReplayList", typeof(string))]
+        public static class PatchGetReplayList
+        {
+            public static bool Prefix(string folder, ref Il2CppSystem.Collections.Generic.List<ReplayLoader.Replay> __result)
             {
-                ReplayLoader.ReplayData replayData = new ReplayLoader.ReplayData();
+                ReplayLoader.checkForFolder(folder);
+                var list = new Il2CppSystem.Collections.Generic.List<ReplayLoader.Replay>();
+                string[] files = Directory.GetFiles(Utils.getRootFolder() + folder, "*.iureplay");
 
-                foreach (var timeSliceListDTO in dto.timeslices)
+                for (int i = 0; i < files.Length; i++)
                 {
-
-                    var il2cppTimeSliceList = new Il2CppSystem.Collections.Generic.List<ReplaySystem.TimeSlice>();
-                    foreach (var timeSliceDTO in timeSliceListDTO)
+                    try
                     {
-                        //MelonLogger.Msg($"Converting TimeSliceDTO - Timestamp: {timeSliceDTO.timeStamp}, Position: ({timeSliceDTO.position.x}, {timeSliceDTO.position.y}, {timeSliceDTO.position.z})");
+                        // Read the content of the replay file
+                        string fileContent = File.ReadAllText(files[i]);
 
-                        ReplaySystem.TimeSlice il2cppTimeSlice = new ReplaySystem.TimeSlice(
-                            timeSliceDTO.timeStamp,
-                            new Vector3(timeSliceDTO.position.x, timeSliceDTO.position.y, timeSliceDTO.position.z),
-                            new Quaternion(timeSliceDTO.rotation.x, timeSliceDTO.rotation.y, timeSliceDTO.rotation.z, timeSliceDTO.rotation.w),
-                            new Vector3(timeSliceDTO.velocity.x, timeSliceDTO.velocity.y, timeSliceDTO.velocity.z),
-                            timeSliceDTO.gas,
-                            timeSliceDTO.brake,
-                            timeSliceDTO.clutch,
-                            timeSliceDTO.steering,
-                            timeSliceDTO.handbrake,
-                            timeSliceDTO.rpm,
-                            timeSliceDTO.gear,
-                            timeSliceDTO.headLights
-                        );
+                        // Print the first 200 characters of the JSON content for debugging purposes
+                        //MelonLogger.Msg($"Deserialized JSON from file {files[i]} (first 1000 chars): {fileContent.Substring(0, Math.Min(1000, fileContent.Length))}");
 
-                        //MelonLogger.Msg($"Created TimeSlice - Timestamp: {il2cppTimeSlice.timeStamp}, Position: {il2cppTimeSlice.position}, Velocity: {il2cppTimeSlice.velocity}");
-                        il2cppTimeSliceList.Add(il2cppTimeSlice);
+                        // Deserialize JSON to NetworkReplayDTO
+                        NetworkReplay networkReplay = JsonConvert.DeserializeObject<NetworkReplay>(fileContent);
+
+                        // Convert DTO to Replay object
+                        ReplayHeader replayHeader = ConvertDTOToIl2CppReplayHeader(networkReplay.header);
+                        ReplayData replayData = ConvertDTOToIl2CppReplayData(networkReplay.replayData);
+
+                        if (replayHeader.version != 2)
+                        {
+                            ReplayLoader.handleIncompatibleReplay(files[i], Utils.getRootFolder() + folder);
+                            continue;
+                        }
+
+                        ReplayLoader.Replay item = new ReplayLoader.Replay
+                        {
+                            path = files[i],
+                            header = replayHeader,
+                            data = replayData
+                        };
+
+                        // Print item details before adding to the list
+                        MelonLogger.Msg($"Adding Replay item to list: {JsonConvert.SerializeObject(item, Formatting.Indented, new JsonSerializerSettings() { ReferenceLoopHandling = ReferenceLoopHandling.Ignore }).Substring(0, 5000)}");
+
+                        list.Add(item);
                     }
-                    replayData.timeslices.Add(il2cppTimeSliceList);
+                    catch (Exception ex)
+                    {
+                        MelonLogger.Msg("Unable to read replay: " + files[i] + " - Exception: " + ex.Message);
+                    }
                 }
 
-                return replayData;
+                MelonLogger.Msg($"Replay data: {list[0].data}");
+
+                __result = list; // Set the correct result type
+                return false; // Skip the original method
             }
 
-            // Method to convert ReplayHeaderDTO to Il2Cpp.ReplayLoader.ReplayHeader
-            private static ReplayLoader.ReplayHeader ConvertDTOToReplayHeader(ReplayHeaderDTO dto)
-            {
-                var il2cppReplayHeader = new ReplayLoader.ReplayHeader(
-                    dto.version,
-                    new Il2CppSystem.DateTime(dto.date.Ticks), // Use a compatible DateTime constructor
-                    dto.isBattle,
-                    dto.replayDuration,
-                    dto.track,
-                    dto.altLayout,
-                    dto.night
-                );
-
-                // Ensure cars are copied over
-                foreach (var carDto in dto.cars)
-                {
-                    MelonLogger.Msg($"Converting CarDTO - Model: {carDto.model}, Driver: {carDto.driver}");
-                    var il2cppCar = new ReplayLoader.Car(carDto.model, carDto.driver);
-                    il2cppReplayHeader.cars.Add(il2cppCar);
-                }
-
-                return il2cppReplayHeader;
-            }
         }
+
     }
 
+
+    //
     // DTO classes for JSON deserialization
-    [Serializable]
-    public class ReplayDataDTO
-    {
-        public List<List<TimeSliceDTO>> timeslices;
-
-        public ReplayDataDTO()
-        {
-            timeslices = new List<List<TimeSliceDTO>>();
-        }
-    }
-
-    [Serializable]
-    public class ReplayHeaderDTO
-    {
-        public int version;
-        public DateTime date;
-        public bool isBattle;
-        public float replayDuration;
-        public string track;
-        public bool altLayout;
-        public bool night;
-        public List<CarDTO> cars;
-
-        public ReplayHeaderDTO()
-        {
-            cars = new List<CarDTO>();
-        }
-    }
+    //
 
     [Serializable]
     public class CarDTO
@@ -250,6 +324,7 @@ namespace ModNamespace
 
         public CarDTO() { }
     }
+
 
     [Serializable]
     public class TimeSliceDTO
@@ -269,7 +344,6 @@ namespace ModNamespace
 
         public TimeSliceDTO() { }
 
-        // Nested classes to properly deserialize nested JSON objects
         [Serializable]
         public class PositionDTO
         {
@@ -297,7 +371,37 @@ namespace ModNamespace
     }
 
 
-    // The new NetworkReplay class used for JSON deserialization
+    [Serializable]
+    public class ReplayDataDTO
+    {
+        public List<List<TimeSliceDTO>> timeslices;
+
+        public ReplayDataDTO()
+        {
+            timeslices = new List<List<TimeSliceDTO>>();
+        }
+    }
+
+
+    [Serializable]
+    public class ReplayHeaderDTO
+    {
+        public int version;
+        public DateTime date;
+        public bool isBattle;
+        public float replayDuration;
+        public string track;
+        public bool altLayout;
+        public bool night;
+        public List<CarDTO> cars;
+
+        public ReplayHeaderDTO()
+        {
+            cars = new List<CarDTO>();
+        }
+    }
+
+
     [Serializable]
     public class NetworkReplay
     {

@@ -4,62 +4,21 @@
 using HarmonyLib;
 using Il2Cpp;
 using MelonLoader;
-using Newtonsoft.Json;
-using UnityEngine;
-using System.Text;
-using System.Reflection;
 
 // Top of Akagi UH: -281.6374 172.5851 74.3028
 // Top of Usui UH: 635.8738 192.6996 742.4423
+// Bottom of Tsuchi DH: 1852.613 -245.3421 -1716.671
 
 namespace ModNamespace
 {
     public partial class CustomLeaderboardAndReplayMod : MelonMod
     {
-
         private static readonly HttpClient httpClient = new();
         private static readonly Queue<Action> _executionQueue = new();
         private static readonly object _queueLock = new();
 
-        private const string API_KEY = "yNrGPe5fnx1sMuNGXRV4o7JUyTonjAoH2G1ky6X3";
-
-        public override void OnApplicationStart()
-        {
-            //MakeMethodPublic();
-            // Any other initialization logic.
-        }
-
-
-
-        //public static void MakeMethodPublic()
-        //{
-        //    var type = typeof(ReplayLoader);
-        //    var method = type.GetMethod("loadOnlineReplay", BindingFlags.NonPublic | BindingFlags.Instance);
-
-
-
-        //    if (method != null)
-        //    {
-        //        // Change the access modifier to public
-        //        MethodInfo methodToModify = method;
-        //        FieldInfo attributes = typeof(MethodInfo).GetField("m_methodAttributes", BindingFlags.NonPublic | BindingFlags.Instance);
-        //        if (attributes != null)
-        //        {
-        //            // Clear the private flag and add the public flag
-        //            attributes.SetValue(methodToModify, (MethodAttributes)((MethodAttributes)attributes.GetValue(methodToModify) & ~MethodAttributes.Private) | MethodAttributes.Public);
-        //        }
-        //    }
-        //    else
-        //    {
-        //        MelonLogger.Msg("Method loadOnlineReplay not found via reflection.");
-        //    }
-
-        //    var methods = typeof(ReplayLoader).GetMethods(BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static);
-        //    foreach (var m in methods)
-        //    {
-        //        MelonLogger.Msg($"Method found: {m.Name}, IsPrivate: {m.IsPrivate}, IsPublic: {m.IsPublic}");
-        //    }
-        //}
+        // Static field that gets set to assist with uploading replays to leaderboard
+        private static string uploadReplayJson;
 
 
         public override void OnInitializeMelon()
@@ -112,9 +71,7 @@ namespace ModNamespace
     }
 
 
-
-
-    // Patching the ProgressTracker to prevent unwanted behavior
+    // Patching the ProgressTracker to allow teleporting during testing
     [HarmonyPatch(typeof(ProgressTracker), "Start")]
     public class ProgressTrackerStartCancel
     {
