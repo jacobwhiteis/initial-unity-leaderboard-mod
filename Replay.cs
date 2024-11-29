@@ -12,6 +12,42 @@ namespace ModNamespace
     public partial class CustomLeaderboardAndReplayMod : MelonMod
     {
 
+        [HarmonyPatch(typeof(GhostManager), "checkForLocalGhost")]
+        public class PatchGhostManager1
+        {
+            public static bool Prefix()
+            {
+                MelonLogger.Msg("In GhostManager checkForLocalGhost");
+                return true;
+            }
+        }
+
+        [HarmonyPatch(typeof(GhostManager), "loadLocalGhost")]
+        public class PatchGhostManager2
+        {
+            public static bool Prefix(GhostManager __instance, string path)
+            {
+                MelonLogger.Msg("In GhostManager loadLocalGhost, calling DownloadLocalReplay");
+                MelonLogger.Msg($"Path: {path}");
+                ReplayLoader.replayToLoad = path;
+                MelonLogger.Msg($"Ghost to load: {ReplayLoader.replayToLoad}");
+                PatchInitReplayMode.DownloadLocalReplayJson(ReplayLoader.instance, false);
+                __instance.insertGhost(ReplayLoader.instance.getLoadedReplay(), false);
+                return true;
+            }
+        }
+
+        [HarmonyPatch(typeof(GhostManager), "insertGhost")]
+        public class PatchGhostManager3
+        {
+            public static bool Prefix()
+            {
+                MelonLogger.Msg("In GhostManager insertGhost");
+                return true;
+            }
+        }
+
+
         [HarmonyPatch(typeof(ReplayLoader), "saveReplay")]
         public class PatchSaveReplay
         {
@@ -169,14 +205,14 @@ namespace ModNamespace
                 {
                     MelonLogger.Msg("in the right place!");
                     MelonLogger.Msg(ReplayLoader.replayToLoad);
-                    DownloadLocalReplayJson(__instance);
+                    DownloadLocalReplayJson(__instance, true);
                 }
 
                 return false;
             }
 
 
-            private static void DownloadLocalReplayJson(ReplayLoader instance)
+            public static void DownloadLocalReplayJson(ReplayLoader instance, bool finishReplayInit)
             {
                 try
                 {
@@ -190,8 +226,11 @@ namespace ModNamespace
                     instance.readHeader = ConvertDTOToIl2CppReplayHeader(networkReplay.header);
                     instance.readData = ConvertDTOToIl2CppReplayData(networkReplay.replayData);
 
-                    MelonLogger.Msg("Local replay deserialized successfully, invoking finishReplayInit...");
-                    instance.finishReplayInit();
+                    if (finishReplayInit)
+                    {
+                        MelonLogger.Msg("Local replay deserialized successfully, invoking finishReplayInit...");
+                        instance.finishReplayInit();
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -291,7 +330,7 @@ namespace ModNamespace
                         };
 
                         // Print item details before adding to the list
-                        MelonLogger.Msg($"Adding Replay item to list: {JsonConvert.SerializeObject(item, Formatting.Indented, new JsonSerializerSettings() { ReferenceLoopHandling = ReferenceLoopHandling.Ignore }).Substring(0, 5000)}");
+                        //MelonLogger.Msg($"Adding Replay item to list: {JsonConvert.SerializeObject(item, Formatting.Indented, new JsonSerializerSettings() { ReferenceLoopHandling = ReferenceLoopHandling.Ignore }).Substring(0, 5000)}");
 
                         list.Add(item);
                     }
@@ -301,7 +340,7 @@ namespace ModNamespace
                     }
                 }
 
-                MelonLogger.Msg($"Replay data: {list[0].data}");
+                //MelonLogger.Msg($"Replay data: {list[0].data}");
 
                 __result = list; // Set the correct result type
                 return false; // Skip the original method
