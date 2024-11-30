@@ -1,6 +1,7 @@
 ﻿
 #pragma warning disable IDE0051
 
+using System.Diagnostics;
 using HarmonyLib;
 using Il2Cpp;
 using MelonLoader;
@@ -8,6 +9,7 @@ using MelonLoader;
 // Top of Akagi UH: -281.6374 172.5851 74.3028
 // Top of Usui UH: 635.8738 192.6996 742.4423
 // Bottom of Tsuchi DH: 1852.613 -245.3421 -1716.671
+// Bottom of Akagi DH: -2327.301 -251.8515 -449.1758
 
 namespace ModNamespace
 {
@@ -24,6 +26,22 @@ namespace ModNamespace
         public override void OnInitializeMelon()
         {
             Melon<CustomLeaderboardAndReplayMod>.Logger.Msg("CustomLeaderboardAndReplayMod initialized.");
+
+            // Create the mod replay and ghost folders if not present
+            string rootFolder = Utils.getRootFolder();
+            string ghostPath = Path.Combine(rootFolder, "ModGhosts");
+            string replayPath = Path.Combine(rootFolder, "ModReplays");
+
+            if (!Directory.Exists(ghostPath))
+            {
+                Directory.CreateDirectory(ghostPath);
+                MelonLogger.Msg($"Directory created: {ghostPath}");
+            }
+            if (!Directory.Exists(replayPath))
+            {
+                Directory.CreateDirectory(replayPath);
+                MelonLogger.Msg($"Directory created: {replayPath}");
+            }
         }
 
 

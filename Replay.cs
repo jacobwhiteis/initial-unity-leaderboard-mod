@@ -7,18 +7,29 @@ using MelonLoader;
 using Il2Cpp;
 using static Il2Cpp.ReplayLoader;
 using static ModNamespace.ReplayConversionUtils;
+using static System.Net.Mime.MediaTypeNames;
+using System.Diagnostics;
 namespace ModNamespace
 {
     public partial class CustomLeaderboardAndReplayMod : MelonMod
     {
 
-        [HarmonyPatch(typeof(GhostManager), "checkForLocalGhost")]
+        [HarmonyPatch(typeof(GhostManager), "getOnlineGhost")]
         public class PatchGhostManager1
         {
             public static bool Prefix()
             {
-                MelonLogger.Msg("In GhostManager checkForLocalGhost");
-                return true;
+                MelonLogger.Msg("In GhostManager getOnlineGhost");
+                //MelonLogger.Msg($"lastBestTime: {EventManager.singleton.lastBestTime}"); // Works
+                float lastBestTime = EventManager.singleton.lastBestTime;
+
+                // TODO: implement
+                //next up: need to patch getOnlineGhost, set out a network request to get top(however many --maybe 50, maybe 200) times and determine which one is just above you, then send a
+                //request to download that one and load it.Its pretty straightforward, just have to set the static replayToLoad field(With recordId) before calling DownloadReplayJson
+                //also need to add a flag to the DownloadReplayJson field so you can disable finishReplayInit. Might be nice to put up a text box telling the user who they're racing (what place on the LB)
+                // Above is done
+
+                return false;
             }
         }
 
@@ -37,14 +48,19 @@ namespace ModNamespace
             }
         }
 
-        [HarmonyPatch(typeof(GhostManager), "insertGhost")]
-        public class PatchGhostManager3
+        [HarmonyPatch(typeof(ReplayMenu), "openFolder")]
+        public class PatchOpenFolder
         {
-            public static bool Prefix()
+            public static bool Prefix(ReplayMenu __instance)
             {
-                MelonLogger.Msg("In GhostManager insertGhost");
-                return true;
+                if (!__instance.animating)
+                {
+                    string arguments = (Utils.getRootFolder() + "ModReplays").Replace("/", "\\");
+                    Process.Start("explorer.exe", arguments);
+                }
+                return false;
             }
+
         }
 
 
@@ -53,6 +69,16 @@ namespace ModNamespace
         {
             public static bool Prefix(ReplayLoader __instance, bool saveAsGhost, string folder, int replaySlicesCount)
             {
+                // Redirect to different folder
+                if (folder == "Ghosts\\Local")
+                {
+                    folder = "ModGhosts\\Local";
+                }
+                else if (folder == "Replays")
+                {
+                    folder = "ModReplays";
+                }
+
                 ReplayLoader.checkForFolder(folder);
 
                 // Check if there are tracked cars in the replay system
@@ -295,6 +321,9 @@ namespace ModNamespace
         {
             public static bool Prefix(string folder, ref Il2CppSystem.Collections.Generic.List<ReplayLoader.Replay> __result)
             {
+                // Redirect to different folder
+                folder = "ModGhosts\\Local";
+
                 ReplayLoader.checkForFolder(folder);
                 var list = new Il2CppSystem.Collections.Generic.List<ReplayLoader.Replay>();
                 string[] files = Directory.GetFiles(Utils.getRootFolder() + folder, "*.iureplay");
