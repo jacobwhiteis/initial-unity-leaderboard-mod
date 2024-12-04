@@ -9,26 +9,111 @@ using static Il2Cpp.ReplayLoader;
 using static ModNamespace.ReplayConversionUtils;
 using static System.Net.Mime.MediaTypeNames;
 using System.Diagnostics;
+using System.Text.Json;
+using System.Diagnostics.Tracing;
+using static MelonLoader.MelonLogger;
 namespace ModNamespace
 {
     public partial class CustomLeaderboardAndReplayMod : MelonMod
     {
+        // Submits leaderboard record and returns presigned S3 URL from HTTP response
+        private static async Task<string> getNextLeaderboardRecord(int track, int layout, int car, float bestTime)
+        {
+            try
+            {
+                string requestParams = "/?";
+                requestParams = requestParams + "&track=" + track 
+                                              + "&layout=" + layout
+                                              + "&bestTime=" + bestTime.ToString();
+                if (car != -1)
+                {
+                    requestParams = requestParams + "&car=" + car;
+                }
+
+                string requestUrl = Constants.NewGetRecordsAddress + requestParams;
+
+                MelonLogger.Msg($"request url: {requestUrl}");
+
+                var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
+                request.Headers.Add(Constants.ApiKeyHeader, Constants.ApiKey);
+
+                // Send the request
+                var response = await httpClient.SendAsync(request);
+
+                // Handle the response
+                if (response.IsSuccessStatusCode)
+                {
+                    string responseBody = await response.Content.ReadAsStringAsync();
+
+                    // Parse JSON to get the record Id
+                    try
+                    {
+                        using (JsonDocument doc = JsonDocument.Parse(responseBody))
+                        {
+                            if (doc.RootElement.TryGetProperty("id", out JsonElement recordId))
+                            {
+                                return recordId.GetString();
+                            }
+                            else
+                            {
+                                Melon<CustomLeaderboardAndReplayMod>.Logger.Error("Response JSON does not contain 'id' field.");
+                                return null;
+                            }
+                        }
+                    }
+                    catch (System.Text.Json.JsonException je)
+                    {
+                        Melon<CustomLeaderboardAndReplayMod>.Logger.Error($"JSON Parsing Exception: {je.Message}");
+                        return null;
+                    }
+                }
+                else
+                {
+                    string errorBody = await response.Content.ReadAsStringAsync();
+                    Melon<CustomLeaderboardAndReplayMod>.Logger.Msg($"Error: {response.StatusCode}, Details: {errorBody}");
+                    return null;
+                }
+            }
+            catch (Exception ex)
+            {
+                Melon<CustomLeaderboardAndReplayMod>.Logger.Error($"Exception during SubmitLeaderboardRecordAsync: {ex.Message}");
+                return null;
+            }
+        }
+
 
         [HarmonyPatch(typeof(GhostManager), "getOnlineGhost")]
         public class PatchGhostManager1
         {
-            public static bool Prefix()
+            public static bool Prefix(GhostManager __instance, bool sameCar)
             {
                 MelonLogger.Msg("In GhostManager getOnlineGhost");
-                //MelonLogger.Msg($"lastBestTime: {EventManager.singleton.lastBestTime}"); // Works
-                float lastBestTime = EventManager.singleton.lastBestTime;
 
-                // TODO: implement
-                //next up: need to patch getOnlineGhost, set out a network request to get top(however many --maybe 50, maybe 200) times and determine which one is just above you, then send a
-                //request to download that one and load it.Its pretty straightforward, just have to set the static replayToLoad field(With recordId) before calling DownloadReplayJson
-                //also need to add a flag to the DownloadReplayJson field so you can disable finishReplayInit. Might be nice to put up a text box telling the user who they're racing (what place on the LB)
-                // Above is done
+                int requestTrack = EventLoader.singleton.trackIndex;
+                int requestLayout = EventLoader.reverseLayout ? 1 : 0;
+                int requestCar = sameCar ? EventLoader.carChoice : -1;
+                float requestBestTime = EventManager.singleton.lastBestTime > 0 ? EventManager.singleton.lastBestTime : 600f;
 
+                MelonLogger.Msg("About to start enqueue");
+                // Get record Id
+                CustomLeaderboardAndReplayMod.Enqueue(async () =>
+                {
+                    try
+                    {
+                        MelonLogger.Msg("Before request");
+                        string recordId = await getNextLeaderboardRecord(requestTrack, requestLayout, requestCar, requestBestTime);
+                        MelonLogger.Msg("After request");
+                        ReplayLoader.replayToLoad = recordId;
+                        MelonLogger.Msg("Done getting recordId from next leaderboard, trying to load now");
+                        await PatchInitReplayMode.DownloadOnlineReplayJson(ReplayLoader.instance, false);
+                    }
+                    catch (Exception ex)
+                    {
+                        Melon<CustomLeaderboardAndReplayMod>.Logger.Error($"Exception occurred while submitting leaderboard record or uploading replay data: {ex.Message}");
+                    }
+                });
+                
+                __instance.insertGhost(ReplayLoader.instance.getLoadedReplay(), false);
                 return false;
             }
         }
@@ -44,7 +129,7 @@ namespace ModNamespace
                 MelonLogger.Msg($"Ghost to load: {ReplayLoader.replayToLoad}");
                 PatchInitReplayMode.DownloadLocalReplayJson(ReplayLoader.instance, false);
                 __instance.insertGhost(ReplayLoader.instance.getLoadedReplay(), false);
-                return true;
+                return false;
             }
         }
 
@@ -133,7 +218,7 @@ namespace ModNamespace
 
                 
                 // Write JSON to file
-                string fullPath = Utils.getRootFolder() + folder + "/" + replayFileName + ".iureplay";
+                string fullPath = Utils.getRootFolder() + folder + "/" + replayFileName + ".iuorep";
                 MelonLogger.Msg($"Writing replay to file at {fullPath}");
                 File.WriteAllText(fullPath, jsonReplay);
                 MelonLogger.Msg("Done writing");
@@ -225,7 +310,7 @@ namespace ModNamespace
                 MelonLogger.Msg("About to be there...");
                 if (ReplayLoader.isOnlineReplay)
                 {
-                    Task.Run(() => DownloadOnlineReplayJson(__instance));
+                    Task.Run(() => DownloadOnlineReplayJson(__instance, false));
                 }
                 else
                 {
@@ -266,7 +351,7 @@ namespace ModNamespace
             }
 
 
-            private static async Task DownloadOnlineReplayJson(ReplayLoader instance)
+            public static async Task DownloadOnlineReplayJson(ReplayLoader instance, bool finishReplayInit)
             {
                 string requestUrl = Constants.NewGetGhostAddress + ReplayLoader.replayToLoad;
                 using (HttpClient httpClient = new())
@@ -289,8 +374,12 @@ namespace ModNamespace
                                     instance.readHeader = ConvertReplayHeaderDTOToIl2Cpp(networkReplay.header);
                                     instance.readData = ConvertReplayDataDTOToIl2Cpp(networkReplay.replayData);
 
-                                    // Invoke the finishReplayInit method to proceed with the original flow
-                                    instance.finishReplayInit();
+                                    if (finishReplayInit)
+                                    {
+                                        MelonLogger.Msg("activating finishReplayInit in downloadonlinereplayjson");
+                                        // Invoke the finishReplayInit method to proceed with the original flow
+                                        instance.finishReplayInit();
+                                    }
                                 });
                              }
                         }
@@ -326,7 +415,7 @@ namespace ModNamespace
 
                 ReplayLoader.checkForFolder(folder);
                 var list = new Il2CppSystem.Collections.Generic.List<ReplayLoader.Replay>();
-                string[] files = Directory.GetFiles(Utils.getRootFolder() + folder, "*.iureplay");
+                string[] files = Directory.GetFiles(Utils.getRootFolder() + folder, "*.iuorep");
 
                 for (int i = 0; i < files.Length; i++)
                 {
