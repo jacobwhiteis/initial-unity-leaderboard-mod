@@ -106,6 +106,12 @@ namespace ModNamespace
                         ReplayLoader.replayToLoad = recordId;
                         MelonLogger.Msg("Done getting recordId from next leaderboard, trying to load now");
                         await PatchInitReplayMode.DownloadOnlineReplayJson(ReplayLoader.instance, false);
+                        MelonLogger.Msg("Made it out of the await. Printing replay information in ReplayLoader:");
+                        MelonLogger.Msg($"Replay header: {ReplayLoader.instance.readHeader}");
+                        CustomLeaderboardAndReplayMod.Enqueue(async () =>
+                        {
+                            __instance.insertGhost(ReplayLoader.instance.getLoadedReplay(), true);
+                        });
                     }
                     catch (Exception ex)
                     {
@@ -113,7 +119,7 @@ namespace ModNamespace
                     }
                 });
                 
-                __instance.insertGhost(ReplayLoader.instance.getLoadedReplay(), false);
+                
                 return false;
             }
         }
@@ -353,6 +359,7 @@ namespace ModNamespace
 
             public static async Task DownloadOnlineReplayJson(ReplayLoader instance, bool finishReplayInit)
             {
+                MelonLogger.Msg("In DownloadOnlineReplayJson");
                 string requestUrl = Constants.NewGetGhostAddress + ReplayLoader.replayToLoad;
                 using (HttpClient httpClient = new())
                 {
@@ -361,26 +368,25 @@ namespace ModNamespace
                         HttpResponseMessage presignedUrlResponse = await httpClient.GetAsync(requestUrl);
                         if (presignedUrlResponse.IsSuccessStatusCode)
                         {
+                            MelonLogger.Msg("In if statement");
                             string presignedS3Url = await presignedUrlResponse.Content.ReadAsStringAsync();
                             HttpResponseMessage replayResponse = await httpClient.GetAsync(presignedS3Url);
+                            MelonLogger.Msg("Got replayResponse");
                             if (replayResponse.IsSuccessStatusCode) {
+                                MelonLogger.Msg("Was success");
                                 string responseJson = await replayResponse.Content.ReadAsStringAsync();
                                 
                                 NetworkReplay networkReplay = JsonConvert.DeserializeObject<NetworkReplay>(responseJson);
 
-                                // Enqueue the action to update the replay data on the main thread
-                                CustomLeaderboardAndReplayMod.Enqueue(() =>
-                                {
-                                    instance.readHeader = ConvertReplayHeaderDTOToIl2Cpp(networkReplay.header);
-                                    instance.readData = ConvertReplayDataDTOToIl2Cpp(networkReplay.replayData);
+                                instance.readHeader = ConvertReplayHeaderDTOToIl2Cpp(networkReplay.header);
+                                instance.readData = ConvertReplayDataDTOToIl2Cpp(networkReplay.replayData);
 
-                                    if (finishReplayInit)
-                                    {
-                                        MelonLogger.Msg("activating finishReplayInit in downloadonlinereplayjson");
-                                        // Invoke the finishReplayInit method to proceed with the original flow
-                                        instance.finishReplayInit();
-                                    }
-                                });
+                                if (finishReplayInit)
+                                {
+                                    MelonLogger.Msg("activating finishReplayInit in downloadonlinereplayjson");
+                                    // Invoke the finishReplayInit method to proceed with the original flow
+                                    instance.finishReplayInit();
+                                }
                              }
                         }
                         else

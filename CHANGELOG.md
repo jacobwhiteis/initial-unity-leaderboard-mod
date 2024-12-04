@@ -2,8 +2,9 @@
 All notable changes to this project will be documented in this file.
 
 ## [TODO]
+X Fix hashtag bug
+X Fix racing against leaderboard ghosts
 - Allow names to be longer (have colors)
-- X DONE Enable racing against leaderboard ghosts
 - Put sector times in leaderboard submissions / replays
 - Enable UI for uploading replays
 - Add UI for racing against leaderboard ghosts ("You are racing against xyz, position n on leaderboard...")
