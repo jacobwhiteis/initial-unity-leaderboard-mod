@@ -7,11 +7,106 @@ using UnityEngine;
 using System.Text;
 using System.Text.Json;
 using UnityEngine.Networking;
+using System.Text.RegularExpressions;
+using Il2CppTMPro;
 
 namespace ModNamespace
 {
     public partial class CustomLeaderboardAndReplayMod : MelonMod
     {
+        // Patches the settings menu to raise characterLimit (length verification is done at name submission)
+        [HarmonyPatch(typeof(SettingsMenu), "Start")]
+        public static class PatchDriverNameLength
+        {
+            static void Prefix(SettingsMenu __instance)
+            {
+                TMP_InputField driverNameInput = __instance.driverNameInput;
+                driverNameInput.textComponent.alignment = TextAlignmentOptions.Center;
+                __instance.driverNameInput.characterLimit = 100;
+            }
+        }
+
+        // Patches the driver name field to allow longer names and exclude hex code colors from character limit
+        [HarmonyPatch(typeof(SettingsMenu), "submitDriverName")]
+        public static class PatchSubmitDriverName
+        {
+            static bool Prefix(SettingsMenu __instance, ref string name)
+            {
+                if (name.Length > 0)
+                {
+                    // Regex to match hex color codes of the format <#xxxxxx>
+                    string pattern = @"<#[0-9a-fA-F]{6}>";
+
+                    // Remove all occurrences of hex color codes
+                    string cleanedString = Regex.Replace(name, pattern, "");
+
+                    int characterCount = cleanedString.Length;
+
+                    GameObject driverNamePanel = __instance.driverNamePanel;
+    
+
+                    if (characterCount > 25)
+                    {
+                        // Find the parent panel for the driver name input
+
+                        // Check if the text already exists
+                        Transform existingTextTransform = driverNamePanel.transform.Find("NameTooLongText");
+
+                        if (existingTextTransform != null)
+                        {
+                            // Update the existing text if it is found
+                            TextMeshProUGUI existingTextMesh = existingTextTransform.GetComponent<TextMeshProUGUI>();
+                            if (existingTextMesh != null)
+                            {
+                                existingTextMesh.text = $"Driver name has a maximum of 25 characters, yours has {characterCount}."; // Update the text
+                                return false;
+                            }
+                        }
+
+
+                        // Create a new GameObject for the additional text
+                        GameObject additionalTextObject = new GameObject("NameTooLongText");
+
+                        // Add the TextMeshProUGUI component
+                        TextMeshProUGUI textMesh = additionalTextObject.AddComponent<TextMeshProUGUI>();
+
+                        // Set the font, alignment, and text
+                        textMesh.text = $"Driver name has a maximum of 25 characters, yours has {characterCount}";
+                        textMesh.font = __instance.driverNameInput.textComponent.font; // Use the same font as the input
+                        textMesh.fontSize = 24;
+                        textMesh.alignment = TextAlignmentOptions.Center;
+
+                        // Position the text under the input field
+                        RectTransform rectTransform = additionalTextObject.GetComponent<RectTransform>();
+                        rectTransform.SetParent(driverNamePanel.transform, false);
+                        rectTransform.anchoredPosition = new Vector2(0, -120); // Adjust position below the input field
+                        rectTransform.sizeDelta = new Vector2(500, 50); // Set the size
+
+                        // Optional: Add styling like color
+                        textMesh.color = Color.red;
+
+                        return false;
+                    }
+                    else
+                    {
+                        MelonLogger.Msg("here");
+                        // Check if the text exists to destroy it
+                        Transform existingTextTransform = driverNamePanel.transform.Find("NameTooLongText");
+
+                        TextMeshProUGUI existingTextMesh = existingTextTransform.GetComponent<TextMeshProUGUI>();
+                        existingTextMesh.text = "";
+
+                        // Let OG method do its thing
+                        return true;
+                    }
+                }
+                else
+                {
+                    return false;
+                }
+            }
+        }
+
 
         // Patches UnityWebRequest to add the API key and change the request address
         [HarmonyPatch(typeof(UnityWebRequest), "SendWebRequest")]
@@ -44,10 +139,14 @@ namespace ModNamespace
 
                 if (!__instance.carController.isTrollCar && AntiWallride.systemEnabled)
                 {
+                    // In driver name, replace any hashes (for hex code colors) with __HASH__
+                    // So as not to screw up DynamoDB composite indexes
+                    string cleanedDriverName = __instance.carController.driver.Replace("#", "__HASH__");
+
                     // Create JSON payload to submit record
                     string jsonPayload = JsonSerializer.Serialize(new
                     {
-                        driverName = __instance.carController.driver,
+                        driverName = cleanedDriverName,
                         timing = __instance.raceTimer,
                         deviceId = SystemInfo.deviceUniqueIdentifier,
                         track = EventLoader.singleton.trackIndex,

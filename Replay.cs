@@ -40,8 +40,11 @@ namespace ModNamespace
                 // Send the request
                 var response = await httpClient.SendAsync(request);
 
+                // Get status code
+                int statusCode = (int)response.StatusCode;
+
                 // Handle the response
-                if (response.IsSuccessStatusCode)
+                if (statusCode == 200)
                 {
                     string responseBody = await response.Content.ReadAsStringAsync();
 
@@ -66,6 +69,11 @@ namespace ModNamespace
                         Melon<CustomLeaderboardAndReplayMod>.Logger.Error($"JSON Parsing Exception: {je.Message}");
                         return null;
                     }
+                }
+                else if (statusCode == 204)
+                {
+                    Melon<CustomLeaderboardAndReplayMod>.Logger.Error("No faster leaderboard record found");
+                    return null;
                 }
                 else
                 {
@@ -93,18 +101,37 @@ namespace ModNamespace
                 int requestLayout = EventLoader.reverseLayout ? 1 : 0;
                 int requestCar = sameCar ? EventLoader.carChoice : -1;
                 float requestBestTime = EventManager.singleton.lastBestTime > 0 ? EventManager.singleton.lastBestTime : 600f;
+                string recordId = null;
 
                 MelonLogger.Msg("About to start enqueue");
-                // Get record Id
+                try
+                {
+                    // Blocking the async call here to fetch recordId
+                    recordId = Task.Run(async () =>
+                        await getNextLeaderboardRecord(requestTrack, requestLayout, requestCar, requestBestTime)
+                    ).Result;
+                }
+                catch (Exception ex)
+                {
+                    Melon<CustomLeaderboardAndReplayMod>.Logger.Error($"Exception occurred while fetching recordId: {ex.Message}");
+                    return false; // Exit the method if an error occurs
+                }
+
+                // Check if recordId is null and exit early
+                if (recordId == null)
+                {
+                    MelonLogger.Msg("recordId is null. Exiting Prefix method.");
+                    return false;
+                }
+
+
+                ReplayLoader.replayToLoad = recordId;
+
                 CustomLeaderboardAndReplayMod.Enqueue(async () =>
                 {
                     try
                     {
-                        MelonLogger.Msg("Before request");
-                        string recordId = await getNextLeaderboardRecord(requestTrack, requestLayout, requestCar, requestBestTime);
-                        MelonLogger.Msg("After request");
-                        ReplayLoader.replayToLoad = recordId;
-                        MelonLogger.Msg("Done getting recordId from next leaderboard, trying to load now");
+                        MelonLogger.Msg("Trying to load replay");
                         await PatchInitReplayMode.DownloadOnlineReplayJson(ReplayLoader.instance, false);
                         MelonLogger.Msg("Made it out of the await. Printing replay information in ReplayLoader:");
                         MelonLogger.Msg($"Replay header: {ReplayLoader.instance.readHeader}");
@@ -115,11 +142,11 @@ namespace ModNamespace
                     }
                     catch (Exception ex)
                     {
-                        Melon<CustomLeaderboardAndReplayMod>.Logger.Error($"Exception occurred while submitting leaderboard record or uploading replay data: {ex.Message}");
+                        Melon<CustomLeaderboardAndReplayMod>.Logger.Error($"Exception occurred while downloading replay data: {ex.Message}");
                     }
                 });
-                
-                
+
+
                 return false;
             }
         }

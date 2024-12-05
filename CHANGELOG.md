@@ -18,6 +18,7 @@ X Fix racing against leaderboard ghosts
 - Set up DNS / buy domain name
 - Write migration / conversation script for replays
 - Make API actually check hardware id for better existing time
+- Add steam chart-like graph
  
 ## [Unreleased]
  
