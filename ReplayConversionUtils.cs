@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Il2Cpp;
+using MelonLoader;
 using UnityEngine;
 using static Il2Cpp.ReplayLoader;
 
@@ -159,6 +160,7 @@ namespace ModNamespace
         // Converts ReplayHeaderDTO to Il2Cpp.ReplayLoader.ReplayHeader
         public static ReplayLoader.ReplayHeader ConvertReplayHeaderDTOToIl2Cpp(ReplayHeaderDTO dto)
         {
+            MelonLogger.Msg("In convert header to il2cpp");
             var il2cppReplayHeader = new ReplayLoader.ReplayHeader(
                 dto.version,
                 new Il2CppSystem.DateTime(dto.date.Ticks),

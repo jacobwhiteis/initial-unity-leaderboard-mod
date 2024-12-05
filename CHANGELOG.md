@@ -6,8 +6,8 @@ X Fix hashtag bug
 X Fix racing against leaderboard ghosts
 X Allow names to be longer (have colors)
 X Enable UI for uploading replays
+X Change file extension of replays/ghosts
 - Encrypt/compress replay files
-- Change file extension of replays/ghosts
 - Find obfuscation method / hide api key
 - Secure all endpoints - add api key verification and body/query string verification
 - Set up cloudflare

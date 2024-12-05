@@ -12,6 +12,8 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Diagnostics.Tracing;
 using static MelonLoader.MelonLogger;
+using System.IO.Compression;
+using System.Text;
 namespace ModNamespace
 {
     public partial class CustomLeaderboardAndReplayMod : MelonMod
@@ -343,7 +345,7 @@ namespace ModNamespace
                 MelonLogger.Msg("About to be there...");
                 if (ReplayLoader.isOnlineReplay)
                 {
-                    Task.Run(() => DownloadOnlineReplayJson(__instance, false));
+                    Task.Run(() => DownloadOnlineReplayJson(__instance, true));
                 }
                 else
                 {
@@ -383,6 +385,16 @@ namespace ModNamespace
                 }
             }
 
+            private static byte[] DecompressReplay(byte[] compressedData)
+            {
+                using (var compressedStream = new MemoryStream(compressedData))
+                using (var decompressedStream = new MemoryStream())
+                using (var gzipStream = new GZipStream(compressedStream, CompressionMode.Decompress))
+                {
+                    gzipStream.CopyTo(decompressedStream);
+                    return decompressedStream.ToArray();
+                }
+            }
 
             public static async Task DownloadOnlineReplayJson(ReplayLoader instance, bool finishReplayInit)
             {
@@ -401,10 +413,23 @@ namespace ModNamespace
                             MelonLogger.Msg("Got replayResponse");
                             if (replayResponse.IsSuccessStatusCode) {
                                 MelonLogger.Msg("Was success");
-                                string responseJson = await replayResponse.Content.ReadAsStringAsync();
-                                
+
+                                // Decompress the response content
+                                byte[] compressedData = await replayResponse.Content.ReadAsByteArrayAsync();
+
+                                MelonLogger.Msg("Waited for ReadAsByteArrayAsync");
+                                byte[] decompressedData = DecompressReplay(compressedData);
+
+                                MelonLogger.Msg("Called DecompressReplay");
+
+                                // Convert the decompressed byte array back to JSON
+                                string responseJson = Encoding.UTF8.GetString(decompressedData);
+                                MelonLogger.Msg("Got jsons tring from decompressedData");
+
+                                // Deserialize the JSON
                                 NetworkReplay networkReplay = JsonConvert.DeserializeObject<NetworkReplay>(responseJson);
 
+                                // Process the replay data
                                 instance.readHeader = ConvertReplayHeaderDTOToIl2Cpp(networkReplay.header);
                                 instance.readData = ConvertReplayDataDTOToIl2Cpp(networkReplay.replayData);
 
@@ -412,7 +437,12 @@ namespace ModNamespace
                                 {
                                     MelonLogger.Msg("activating finishReplayInit in downloadonlinereplayjson");
                                     // Invoke the finishReplayInit method to proceed with the original flow
-                                    instance.finishReplayInit();
+                                    // Maybe need to ask enqueue here?
+                                    CustomLeaderboardAndReplayMod.Enqueue(async () =>
+                                    {
+                                        instance.finishReplayInit();
+                                    });
+                                    MelonLogger.Msg("Done calling finishReplayInit");
                                 }
                              }
                         }

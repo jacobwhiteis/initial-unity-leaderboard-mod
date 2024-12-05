@@ -10,6 +10,8 @@ using UnityEngine.Networking;
 using System.Text.RegularExpressions;
 using Il2CppTMPro;
 using Il2CppValve.VR.InteractionSystem;
+using System.IO;
+using System.IO.Compression;
 
 namespace ModNamespace
 {
@@ -182,7 +184,7 @@ namespace ModNamespace
                             {
                                 await UploadReplayDataAsync(s3Url, uploadReplayJson);
                                 Uploader.instance.uploadingText.text = "New Record Sent!";
-                                await Task.Delay(TimeSpan.FromSeconds(9));
+                                await Task.Delay(TimeSpan.FromSeconds(7));
                                 Uploader.instance.uploadGroup.alpha = 0f;
                             }
                             else
@@ -267,11 +269,13 @@ namespace ModNamespace
         {
             try
             {
+                // Compress the replay JSON
+                byte[] replayData = Encoding.UTF8.GetBytes(replayJson); // Convert JSON to bytes
+                byte[] compressedReplayData = CompressReplay(replayData); // Compress the replay data
+
                 // Create the content for the PUT request
-                var content = new StringContent(replayJson, Encoding.UTF8, "application/json");
-
-                content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
-
+                var content = new ByteArrayContent(compressedReplayData);
+                content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/x-gzip"); // Set content type to GZip
 
                 // Send the PUT request to upload replay data
                 var response = await httpClient.PutAsync(s3Url, content);
@@ -289,6 +293,19 @@ namespace ModNamespace
             catch (Exception ex)
             {
                 Melon<CustomLeaderboardAndReplayMod>.Logger.Error($"Exception during UploadReplayDataAsync: {ex.Message}");
+            }
+        }
+
+
+        public static byte[] CompressReplay(byte[] replayData)
+        {
+            using (var compressedStream = new MemoryStream())
+            {
+                using (var gzipStream = new GZipStream(compressedStream, System.IO.Compression.CompressionLevel.Optimal))
+                {
+                    gzipStream.Write(replayData, 0, replayData.Length);
+                }
+                return compressedStream.ToArray();
             }
         }
 
