@@ -7,7 +7,7 @@ X Fix racing against leaderboard ghosts
 X Allow names to be longer (have colors)
 X Enable UI for uploading replays
 X Change file extension of replays/ghosts
-- Encrypt/compress replay files
+X Encrypt/compress replay files
 - Find obfuscation method / hide api key
 - Secure all endpoints - add api key verification and body/query string verification
 - Set up cloudflare
@@ -23,6 +23,7 @@ X Change file extension of replays/ghosts
 
 - Add UI for racing against leaderboard ghosts ("You are racing against xyz, position n on leaderboard...")
 - Add steam chart-like graph
+- Anti-cheat?
  
 ## [Unreleased]
  

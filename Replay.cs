@@ -251,12 +251,15 @@ namespace ModNamespace
                 // Generate a replay filename based on event details
                 string replayFileName = GenerateReplayFileName(folder, saveAsGhost);
 
-                
-                // Write JSON to file
+                // Compress the JSON replay data
+                byte[] replayByteData = Encoding.UTF8.GetBytes(jsonReplay); // Convert JSON to bytes
+                byte[] compressedReplayByteData = CompressReplay(replayByteData); // Compress the data
+
+                // Write the compressed data to file
                 string fullPath = Utils.getRootFolder() + folder + "/" + replayFileName + ".iuorep";
-                MelonLogger.Msg($"Writing replay to file at {fullPath}");
-                File.WriteAllText(fullPath, jsonReplay);
-                MelonLogger.Msg("Done writing");
+                MelonLogger.Msg($"Writing compressed replay to file at {fullPath}");
+                File.WriteAllBytes(fullPath, compressedReplayByteData); // Write as binary
+                MelonLogger.Msg("Done writing compressed replay");
 
                 // Update saving state
                 __instance.saving = false;
@@ -362,8 +365,14 @@ namespace ModNamespace
             {
                 try
                 {
-                    // Read the content of the replay file
-                    string fileContent = File.ReadAllText(ReplayLoader.replayToLoad);
+                    // Read the compressed replay file as a byte array
+                    byte[] compressedData = File.ReadAllBytes(ReplayLoader.replayToLoad);
+
+                    // Decompress the data
+                    byte[] decompressedData = DecompressReplay(compressedData);
+
+                    // Convert the decompressed data back to a JSON string
+                    string fileContent = Encoding.UTF8.GetString(decompressedData);
 
                     // Deserialize JSON to NetworkReplayDTO
                     NetworkReplay networkReplay = JsonConvert.DeserializeObject<NetworkReplay>(fileContent);
@@ -385,16 +394,7 @@ namespace ModNamespace
                 }
             }
 
-            private static byte[] DecompressReplay(byte[] compressedData)
-            {
-                using (var compressedStream = new MemoryStream(compressedData))
-                using (var decompressedStream = new MemoryStream())
-                using (var gzipStream = new GZipStream(compressedStream, CompressionMode.Decompress))
-                {
-                    gzipStream.CopyTo(decompressedStream);
-                    return decompressedStream.ToArray();
-                }
-            }
+
 
             public static async Task DownloadOnlineReplayJson(ReplayLoader instance, bool finishReplayInit)
             {
@@ -484,8 +484,18 @@ namespace ModNamespace
                 {
                     try
                     {
+
+                        // Read the compressed replay file as a byte array
+                        byte[] compressedData = File.ReadAllBytes(files[i]);
+                            
+                        // Decompress the data
+                        byte[] decompressedData = DecompressReplay(compressedData);
+
+                        // Convert the decompressed data back to a JSON string
+                        string fileContent = Encoding.UTF8.GetString(decompressedData);
                         // Read the content of the replay file
-                        string fileContent = File.ReadAllText(files[i]);
+
+                        //string fileContent = File.ReadAllText(files[i]);
 
                         // Print the first 200 characters of the JSON content for debugging purposes
                         //MelonLogger.Msg($"Deserialized JSON from file {files[i]} (first 1000 chars): {fileContent.Substring(0, Math.Min(1000, fileContent.Length))}");
@@ -527,6 +537,17 @@ namespace ModNamespace
                 return false; // Skip the original method
             }
 
+        }
+
+        public static byte[] DecompressReplay(byte[] compressedData)
+        {
+            using (var compressedStream = new MemoryStream(compressedData))
+            using (var decompressedStream = new MemoryStream())
+            using (var gzipStream = new GZipStream(compressedStream, CompressionMode.Decompress))
+            {
+                gzipStream.CopyTo(decompressedStream);
+                return decompressedStream.ToArray();
+            }
         }
 
     }

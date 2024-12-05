@@ -1,4 +1,5 @@
 ﻿#pragma warning disable IDE0051
+#pragma warning disable IDE0037
 
 using HarmonyLib;
 using Il2Cpp;
@@ -158,20 +159,28 @@ namespace ModNamespace
 
                 if (!__instance.carController.isTrollCar && AntiWallride.systemEnabled)
                 {
-                    // In driver name, replace any hashes (for hex code colors) with __HASH__
-                    // So as not to screw up DynamoDB composite indexes
-                    string cleanedDriverName = __instance.carController.driver.Replace("#", "__HASH__");
+                    
+                    // Get the sector times
+                    float[] sectortimes = TimeAttack.singleton.sectionTimings.ToArray();
+                    float sector1 = sectortimes[0];
+                    float sector2 = sectortimes[1];
+                    float sector3 = sectortimes[2];
+                    float sector4 = __instance.raceTimer - sector1 + sector2 + sector3;
 
                     // Create JSON payload to submit record
                     string jsonPayload = JsonSerializer.Serialize(new
                     {
-                        driverName = cleanedDriverName,
+                        driverName = __instance.carController.driver,
                         timing = __instance.raceTimer,
                         deviceId = SystemInfo.deviceUniqueIdentifier,
                         track = EventLoader.singleton.trackIndex,
                         direction = __instance.reverse ? 1 : 0,
                         car = __instance.carChoice,
                         timeOfDay = Weather.singleton.night ? 1 : 0,
+                        sector1 = sector1,
+                        sector2 = sector2,
+                        sector3 = sector3,
+                        sector4 = sector4
                     });
 
                     // Call API using custom task queue
