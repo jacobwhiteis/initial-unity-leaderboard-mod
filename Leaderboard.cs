@@ -9,6 +9,7 @@ using System.Text.Json;
 using UnityEngine.Networking;
 using System.Text.RegularExpressions;
 using Il2CppTMPro;
+using Il2CppValve.VR.InteractionSystem;
 
 namespace ModNamespace
 {
@@ -135,6 +136,22 @@ namespace ModNamespace
         {
             static bool Prefix(EventManager __instance)
             {
+                MelonLogger.Msg("in ghostSavedAndPrepped prefix");
+
+                // Check if the uploadGroup and uploadingText already exist
+                if (Uploader.instance.uploadGroup == null || Uploader.instance.uploadingText == null)
+                {
+                    MelonLogger.Error("Uploader UI components are missing.");
+                    return false;
+                }
+
+                // Set the text to "Sending Record..."
+                Uploader.instance.uploadingText.text = "Sending Record...";
+                Uploader.instance.uploadGroup.alpha = 1f;
+
+
+
+                MelonLogger.Msg("out of uploader stuff");
                 var replayData = ReplayLoader.instance.getPreparedReplay();
 
                 if (!__instance.carController.isTrollCar && AntiWallride.systemEnabled)
@@ -164,9 +181,14 @@ namespace ModNamespace
                             if (!string.IsNullOrEmpty(s3Url))
                             {
                                 await UploadReplayDataAsync(s3Url, uploadReplayJson);
+                                Uploader.instance.uploadingText.text = "New Record Sent!";
+                                await Task.Delay(TimeSpan.FromSeconds(9));
+                                Uploader.instance.uploadGroup.alpha = 0f;
                             }
                             else
                             {
+
+                                Uploader.instance.uploadingText.text = "Server Unavailable";
                                 Melon<CustomLeaderboardAndReplayMod>.Logger.Error("Failed to retrieve S3 URL. Replay data upload skipped.");
                             }
                         }

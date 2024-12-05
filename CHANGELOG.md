@@ -4,20 +4,24 @@ All notable changes to this project will be documented in this file.
 ## [TODO]
 X Fix hashtag bug
 X Fix racing against leaderboard ghosts
-- Allow names to be longer (have colors)
-- Put sector times in leaderboard submissions / replays
-- Enable UI for uploading replays
-- Add UI for racing against leaderboard ghosts ("You are racing against xyz, position n on leaderboard...")
-- Encrypt replays
-- Find obfuscation method / hide api key
+X Allow names to be longer (have colors)
+X Enable UI for uploading replays
+- Encrypt/compress replay files
 - Change file extension of replays/ghosts
+- Find obfuscation method / hide api key
 - Secure all endpoints - add api key verification and body/query string verification
-- Write up a "Game update" process walkthrough
 - Set up cloudflare
 - Improve website design
 - Set up DNS / buy domain name
 - Write migration / conversation script for replays
 - Make API actually check hardware id for better existing time
+
+- Write up a "Game update" process walkthrough
+- Put sector times in leaderboard submissions / replays
+- Make chat disable all other inputs
+- Make webtool for people to convert their replays to new format
+
+- Add UI for racing against leaderboard ghosts ("You are racing against xyz, position n on leaderboard...")
 - Add steam chart-like graph
  
 ## [Unreleased]

@@ -10,6 +10,9 @@ using MelonLoader;
 // Top of Usui UH: 635.8738 192.6996 742.4423
 // Bottom of Tsuchi DH: 1852.613 -245.3421 -1716.671
 // Bottom of Akagi DH: -2327.301 -251.8515 -449.1758
+// Bottom of Usui DH: -1431.378 -25.7216 -221.3933
+
+// Invisible wall past finish line on Akagi DH is blocker 20 
 
 namespace ModNamespace
 {
