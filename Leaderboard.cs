@@ -119,6 +119,7 @@ namespace ModNamespace
             static void Prefix(UnityWebRequest __instance)
             {
                 __instance.SetRequestHeader(Constants.ApiKeyHeader, Constants.ApiKey);
+                MelonLogger.Msg(__instance.url);
 
                 // Replace original URL with new one
                 if (__instance.url.Equals(Constants.OldWriteRecordAddress))
@@ -129,6 +130,7 @@ namespace ModNamespace
                 {
                     __instance.url = __instance.url.Replace(Constants.OldGetRecordsAddress, Constants.NewGetRecordsAddress);
                 }
+                MelonLogger.Msg(__instance.url);
             }
         }
 

@@ -1,0 +1,11 @@
+Delete table:
+aws dynamodb delete-table --table-name initial-unity-leaderboard
+
+Check table status:
+aws dynamodb describe-table --table-name initial-unity-leaderboard
+
+Create table:
+aws dynamodb create-table --cli-input-json file://table-schema.json
+
+Verify table:
+aws dynamodb describe-table --table-name initial-unity-leaderboard

@@ -15,8 +15,8 @@ namespace ModNamespace
 
         // API Constants
         public const string ApiKeyHeader = "x-api-key";
-        public const string ApiKey = "yNrGPe5fnx1sMuNGXRV4o7JUyTonjAoH2G1ky6X3";
-        public const string NewBaseLeaderboardAddress = "https://o2hm4g1w50.execute-api.us-east-1.amazonaws.com/prod";
+        public const string ApiKey = "ZTp93l4D6XaL3FZVH11Kd36CWbsrB5Y8aACFCfwv";
+        public const string NewBaseLeaderboardAddress = "https://api.initialunityreborn.com";
         public const string NewGetGhostAddress = NewBaseLeaderboardAddress + "/getGhost/?id=";
         public const string NewGetRecordsAddress = NewBaseLeaderboardAddress + "/getRecords";
         public const string NewWriteRecordAddress = NewBaseLeaderboardAddress + "/writeRecord";

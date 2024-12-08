@@ -3,6 +3,7 @@
 using HarmonyLib;
 using Newtonsoft.Json;
 using UnityEngine;
+using UnityEngine.Events;
 using MelonLoader;
 using Il2Cpp;
 using static Il2Cpp.ReplayLoader;
@@ -14,6 +15,7 @@ using System.Diagnostics.Tracing;
 using static MelonLoader.MelonLogger;
 using System.IO.Compression;
 using System.Text;
+using Il2CppTelepathy;
 namespace ModNamespace
 {
     public partial class CustomLeaderboardAndReplayMod : MelonMod
@@ -175,7 +177,7 @@ namespace ModNamespace
             {
                 if (!__instance.animating)
                 {
-                    string arguments = (Utils.getRootFolder() + "ModReplays").Replace("/", "\\");
+                    string arguments = (Il2Cpp.Utils.getRootFolder() + "ModReplays").Replace("/", "\\");
                     Process.Start("explorer.exe", arguments);
                 }
                 return false;
@@ -256,7 +258,7 @@ namespace ModNamespace
                 byte[] compressedReplayByteData = CompressReplay(replayByteData); // Compress the data
 
                 // Write the compressed data to file
-                string fullPath = Utils.getRootFolder() + folder + "/" + replayFileName + ".iuorep";
+                string fullPath = Il2Cpp.Utils.getRootFolder() + folder + "/" + replayFileName + ".iuorep";
                 MelonLogger.Msg($"Writing compressed replay to file at {fullPath}");
                 File.WriteAllBytes(fullPath, compressedReplayByteData); // Write as binary
                 MelonLogger.Msg("Done writing compressed replay");
@@ -404,6 +406,8 @@ namespace ModNamespace
                 {
                     try
                     {
+                        httpClient.DefaultRequestHeaders.Add(Constants.ApiKeyHeader, Constants.ApiKey);
+
                         HttpResponseMessage presignedUrlResponse = await httpClient.GetAsync(requestUrl);
                         if (presignedUrlResponse.IsSuccessStatusCode)
                         {
@@ -424,7 +428,9 @@ namespace ModNamespace
 
                                 // Convert the decompressed byte array back to JSON
                                 string responseJson = Encoding.UTF8.GetString(decompressedData);
-                                MelonLogger.Msg("Got jsons tring from decompressedData");
+                                MelonLogger.Msg("Got json string from decompressedData");
+
+                                //MelonLogger.Msg(responseJson);
 
                                 // Deserialize the JSON
                                 NetworkReplay networkReplay = JsonConvert.DeserializeObject<NetworkReplay>(responseJson);
@@ -444,7 +450,12 @@ namespace ModNamespace
                                     });
                                     MelonLogger.Msg("Done calling finishReplayInit");
                                 }
-                             }
+                            }
+                            else
+                            {
+                                MelonLogger.Error("Bad response from server");
+                                EventManager.singleton.goToMainMenu();
+                            }
                         }
                         else
                         {
@@ -473,12 +484,13 @@ namespace ModNamespace
         {
             public static bool Prefix(string folder, ref Il2CppSystem.Collections.Generic.List<ReplayLoader.Replay> __result)
             {
+
                 // Redirect to different folder
-                folder = "ModGhosts\\Local";
+                folder = "ModReplays\\Local";
 
                 ReplayLoader.checkForFolder(folder);
                 var list = new Il2CppSystem.Collections.Generic.List<ReplayLoader.Replay>();
-                string[] files = Directory.GetFiles(Utils.getRootFolder() + folder, "*.iuorep");
+                string[] files = Directory.GetFiles(Il2Cpp.Utils.getRootFolder() + folder, "*.iuorep");
 
                 for (int i = 0; i < files.Length; i++)
                 {
@@ -487,7 +499,7 @@ namespace ModNamespace
 
                         // Read the compressed replay file as a byte array
                         byte[] compressedData = File.ReadAllBytes(files[i]);
-                            
+
                         // Decompress the data
                         byte[] decompressedData = DecompressReplay(compressedData);
 
@@ -509,7 +521,7 @@ namespace ModNamespace
 
                         if (replayHeader.version != 2)
                         {
-                            ReplayLoader.handleIncompatibleReplay(files[i], Utils.getRootFolder() + folder);
+                            ReplayLoader.handleIncompatibleReplay(files[i], Il2Cpp.Utils.getRootFolder() + folder);
                             continue;
                         }
 

@@ -1,0 +1,59 @@
+{
+    "TableName": "initial-unity-leaderboard",
+    "AttributeDefinitions": [
+        {
+            "AttributeName": "id",
+            "AttributeType": "S"
+        },
+        {
+            "AttributeName": "device_id#track#direction#car",
+            "AttributeType": "S"
+        },
+        {
+            "AttributeName": "track#direction#car",
+            "AttributeType": "S"
+        },
+        {
+            "AttributeName": "time_in_ms",
+            "AttributeType": "N"
+        }
+    ],
+    "KeySchema": [
+        {
+            "AttributeName": "id",
+            "KeyType": "HASH"
+        }
+    ],
+    "BillingMode": "PAY_PER_REQUEST",
+    "GlobalSecondaryIndexes": [
+        {
+            "IndexName": "ExistingRecordLookupGSI",
+            "KeySchema": [
+                {
+                    "AttributeName": "device_id#track#direction#car",
+                    "KeyType": "HASH"
+                }
+            ],
+            "Projection": {
+                "ProjectionType": "ALL"
+            }
+        },
+        {
+            "IndexName": "TrackDirectionCarGSI",
+            "KeySchema": [
+                {
+                    "AttributeName": "track#direction#car",
+                    "KeyType": "HASH"
+                },
+                {
+                    "AttributeName": "time_in_ms",
+                    "KeyType": "RANGE"
+                }
+            ],
+            "Projection": {
+                "ProjectionType": "ALL"
+            }
+        }
+    ]
+}
+

@@ -1,60 +1,67 @@
-# 		string text = Utils.getServerAddress() + "/getRecords/";
-# 		text = text + "?track=" + course;
-# 		text = text + "&layout=" + (layout ? "1" : "0");
-# 		text = text + "&condition=" + (night ? "1" : "0");
-# 		text = text + "&car=" + car;
-
-# "https://www.initialunity.online/getRecords/?track=0&layout=0&condition=0&car=1"
-
-# 8 trackIds
-# 2 layoutIds
-# 2 conditionIds
-# 10 carIds
-# ONLY VANILLA CARS AND TRACKS
-
-import requests
+from gevent import monkey
+monkey.patch_all()
 import os
 import json
+import requests
+from gevent import pool
 
-# URLs
-records_url = "https://initialunity.online/getRecords/?track=0&layout=0&condition=0&car=0"
-ghost_url_template = "https://www.initialunity.online/getGhost/?id={id}"
+# Base URLs
+records_url_template = "https://initialunity.online/getRecords/?track={track}&layout={layout}&condition={condition}&car={car}"
 
-# Output paths
-records_output_file = "records.json"
-ghosts_directory = "ghost_files"
+# Directory for output files
+output_directory = "output_records"
+os.makedirs(output_directory, exist_ok=True)
 
-# Create the directory for ghost files if it doesn't exist
-os.makedirs(ghosts_directory, exist_ok=True)
+# Shared structure to store all IDs
+all_ids = []
 
-# Fetch the records
-try:
-    response = requests.get(records_url)
-    if response.status_code == 200:
-        records_data = response.json()
-        
-        # Save the records JSON data to a file
-        with open(records_output_file, "w", encoding="utf-8") as f:
-            json.dump(records_data, f, ensure_ascii=False, indent=4)
-        print(f"Records saved to {records_output_file}")
+# Define a function to process each parameter combination
+def fetch_and_process(track, layout, condition, car):
+    records_url = records_url_template.format(track=track, layout=layout, condition=condition, car=car)
+    try:
+        response = requests.get(records_url)
+        if response.status_code == 200:
+            records_data = response.json()
 
-        # Download each ghost file based on the record ID
-        for record in records_data.get("records", []):
-            record_id = record["id"]
-            ghost_url = ghost_url_template.format(id=record_id)
-            ghost_response = requests.get(ghost_url)
-
-            if ghost_response.status_code == 200:
-                ghost_file_path = os.path.join(ghosts_directory, f"{record_id}.iureplay")
-
-                # Save the ghost file
-                with open(ghost_file_path, "wb") as ghost_file:
-                    ghost_file.write(ghost_response.content)
-                print(f"Downloaded ghost file for ID {record_id} and saved as {ghost_file_path}")
+            # Extract IDs from the records
+            if "records" in records_data:
+                ids = [record["id"] for record in records_data["records"]]
+                all_ids.extend(ids)
+                print(f"Fetched {len(ids)} IDs for track={track}, layout={layout}, condition={condition}, car={car}")
             else:
-                print(f"Failed to download ghost file for ID {record_id}, status code: {ghost_response.status_code}")
-    else:
-        print(f"Failed to fetch records, status code: {response.status_code}")
+                print(f"No records found for track={track}, layout={layout}, condition={condition}, car={car}")
 
-except Exception as e:
-    print("An error occurred:", str(e))
+        else:
+            print(f"Failed to fetch records for URL: {records_url}, status code: {response.status_code}")
+
+    except Exception as e:
+        print(f"An error occurred while processing URL {records_url}: {str(e)}")
+
+# Use gevent pool to make concurrent requests
+def main():
+    args = [
+        (track, layout, condition, car)
+        for track in range(8)  # track 0-7
+        for layout in range(2)  # layout 0-1
+        for condition in range(2)  # condition 0-1
+        for car in range(10)  # car 0-9
+    ]
+
+    # Create a pool of workers
+    pool_size = 50
+    pool_instance = pool.Pool(pool_size)
+
+    # Spawn tasks in the pool
+    threads = [pool_instance.spawn(fetch_and_process, *arg) for arg in args]
+
+    # Wait for all tasks to complete
+    pool_instance.join()
+
+    output_file = os.path.join(output_directory, "record_ids_full.json")
+    with open(output_file, "w", encoding="utf-8") as f:
+        json.dump(all_ids, f, ensure_ascii=False, indent=4)
+
+    print(f"All IDs written")
+
+if __name__ == "__main__":
+    main()

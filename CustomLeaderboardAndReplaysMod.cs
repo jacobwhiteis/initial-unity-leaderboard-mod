@@ -45,6 +45,7 @@ namespace ModNamespace
                 Directory.CreateDirectory(replayPath);
                 MelonLogger.Msg($"Directory created: {replayPath}");
             }
+
         }
 
 
@@ -112,5 +113,6 @@ namespace ModNamespace
     {
         static bool Prefix() { return false; }
     }
+
 
 }
