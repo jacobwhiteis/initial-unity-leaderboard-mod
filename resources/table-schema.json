@@ -14,6 +14,10 @@
             "AttributeType": "S"
         },
         {
+            "AttributeName": "track#direction",
+            "AttributeType": "S"
+        },
+        {
             "AttributeName": "time_in_ms",
             "AttributeType": "N"
         }
@@ -43,6 +47,22 @@
             "KeySchema": [
                 {
                     "AttributeName": "track#direction#car",
+                    "KeyType": "HASH"
+                },
+                {
+                    "AttributeName": "time_in_ms",
+                    "KeyType": "RANGE"
+                }
+            ],
+            "Projection": {
+                "ProjectionType": "ALL"
+            }
+        },
+        {
+            "IndexName": "TrackDirectionGSI",
+            "KeySchema": [
+                {
+                    "AttributeName": "track#direction",
                     "KeyType": "HASH"
                 },
                 {

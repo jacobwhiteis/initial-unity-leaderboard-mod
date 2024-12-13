@@ -24,5 +24,11 @@ namespace ModNamespace
         public const string OldGetRecordsAddress = "https://initialunity.online/getRecords";
         public const string OldWriteRecordAddress = "https://initialunity.online/postRecord";
 
+        // I/O Constants
+        public const string OldGhostFolder = "Ghosts\\Local";
+        public const string OldReplayFolder = "Replays\\Local";
+        public const string NewGhostFolder = "ModGhosts\\Local";
+        public const string NewReplayFolder = "ModReplays\\Local";
+
     }
 }

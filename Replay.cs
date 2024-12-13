@@ -192,13 +192,13 @@ namespace ModNamespace
             public static bool Prefix(ReplayLoader __instance, bool saveAsGhost, string folder, int replaySlicesCount)
             {
                 // Redirect to different folder
-                if (folder == "Ghosts\\Local")
+                if (folder == Constants.OldGhostFolder)
                 {
-                    folder = "ModGhosts\\Local";
+                    folder = Constants.NewGhostFolder;
                 }
-                else if (folder == "Replays")
+                else if (folder == Constants.OldReplayFolder)
                 {
-                    folder = "ModReplays";
+                    folder = Constants.NewReplayFolder;
                 }
 
                 ReplayLoader.checkForFolder(folder);
@@ -208,7 +208,7 @@ namespace ModNamespace
                 {
                     return false; // Skip original method
                 }
-
+ 
                 // Extract replay details
                 float timeStamp = ReplaySystem.singleton.trackedCars[0].timeSlices[replaySlicesCount - 1].timeStamp;
                 ReplayHeader replayHeader = new ReplayHeader(
@@ -486,7 +486,14 @@ namespace ModNamespace
             {
 
                 // Redirect to different folder
-                folder = "ModReplays\\Local";
+                if (folder == "Replays\\Local")
+                {
+                    folder = "ModReplays\\Local";
+                }
+                else if (folder == "Ghosts\\Local")
+                {
+                    folder = "ModGhosts\\Local";
+                }
 
                 ReplayLoader.checkForFolder(folder);
                 var list = new Il2CppSystem.Collections.Generic.List<ReplayLoader.Replay>();

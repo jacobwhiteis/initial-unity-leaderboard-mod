@@ -37,13 +37,18 @@ def upload_replay_data(s3_url, iuorep_file_path):
         
         if upload_response.status_code == 200:
             print(f"Replay data successfully uploaded: {iuorep_file_path}")
+            # print(f"s3_url was: {s3_url}")
         else:
             print(f"Failed to upload replay data. Status Code: {upload_response.status_code}")
             print(upload_response.text)
     except FileNotFoundError:
         print(f"File not found: {iuorep_file_path}")
     except Exception as e:
+        print("\n")
         print(f"An error occurred during upload: {e}")
+        print(f"s3_url was: {s3_url}")
+        print(f"iuorep_file_path was: {iuorep_file_path}")
+        print("\n")
 
 def make_requests(track, layout, car):
     """

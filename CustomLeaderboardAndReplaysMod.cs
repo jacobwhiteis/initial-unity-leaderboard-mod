@@ -5,6 +5,7 @@ using System.Diagnostics;
 using HarmonyLib;
 using Il2Cpp;
 using MelonLoader;
+using UnityEngine.InputSystem;
 
 // Top of Akagi UH: -281.6374 172.5851 74.3028
 // Top of Usui UH: 635.8738 192.6996 742.4423
@@ -18,7 +19,8 @@ namespace ModNamespace
 {
     public partial class CustomLeaderboardAndReplayMod : MelonMod
     {
-        private static readonly HttpClient httpClient = new();
+
+    private static readonly HttpClient httpClient = new();
         private static readonly Queue<Action> _executionQueue = new();
         private static readonly object _queueLock = new();
 
@@ -73,6 +75,21 @@ namespace ModNamespace
 
         public override void OnUpdate()
         {
+
+            // Check if the 'P' key was pressed this frame
+            if (Keyboard.current != null && Keyboard.current.pKey.wasPressedThisFrame)
+            {
+                MelonLogger.Msg("P pressed");
+                Weather.singleton.changeToNight = true;
+            }
+
+            // Check if the 'O' key was pressed this frame
+            if (Keyboard.current != null && Keyboard.current.oKey.wasPressedThisFrame)
+            {
+                MelonLogger.Msg("O pressed");
+                Weather.singleton.changeToDay = true;
+            }
+
             // Execute any queued actions on the main thread
             lock (_queueLock)
             {
