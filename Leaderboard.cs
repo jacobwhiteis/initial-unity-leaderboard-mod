@@ -93,7 +93,6 @@ namespace ModNamespace
                     }
                     else
                     {
-                        MelonLogger.Msg("here");
                         // Check if the text exists to destroy it
                         Transform existingTextTransform = driverNamePanel.transform.Find("NameTooLongText");
 
@@ -118,8 +117,7 @@ namespace ModNamespace
         {
             static void Prefix(UnityWebRequest __instance)
             {
-                __instance.SetRequestHeader(Constants.ApiKeyHeader, Constants.ApiKey);
-                MelonLogger.Msg(__instance.url);
+                __instance.SetRequestHeader(Constants.ApiKeyHeader, BuildAPIKey());
 
                 // Replace original URL with new one
                 if (__instance.url.Equals(Constants.OldWriteRecordAddress))
@@ -130,7 +128,6 @@ namespace ModNamespace
                 {
                     __instance.url = __instance.url.Replace(Constants.OldGetRecordsAddress, Constants.NewGetRecordsAddress);
                 }
-                MelonLogger.Msg(__instance.url);
             }
         }
 
@@ -141,12 +138,11 @@ namespace ModNamespace
         {
             static bool Prefix(EventManager __instance)
             {
-                MelonLogger.Msg("in ghostSavedAndPrepped prefix");
 
                 // Check if the uploadGroup and uploadingText already exist
                 if (Uploader.instance.uploadGroup == null || Uploader.instance.uploadingText == null)
                 {
-                    MelonLogger.Error("Uploader UI components are missing.");
+
                     return false;
                 }
 
@@ -155,8 +151,6 @@ namespace ModNamespace
                 Uploader.instance.uploadGroup.alpha = 1f;
 
 
-
-                MelonLogger.Msg("out of uploader stuff");
                 var replayData = ReplayLoader.instance.getPreparedReplay();
 
                 if (!__instance.carController.isTrollCar && AntiWallride.systemEnabled)
@@ -223,7 +217,7 @@ namespace ModNamespace
             try
             {
                 var request = new HttpRequestMessage(HttpMethod.Post, Constants.NewWriteRecordAddress);
-                request.Headers.Add(Constants.ApiKeyHeader, Constants.ApiKey);
+                request.Headers.Add(Constants.ApiKeyHeader, BuildAPIKey());
 
                 // Set the request content
                 request.Content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");

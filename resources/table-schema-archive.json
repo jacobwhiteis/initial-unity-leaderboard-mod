@@ -1,5 +1,5 @@
 {
-    "TableName": "initial-unity-leaderboard",
+    "TableName": "initial-unity-leaderboard-archive",
     "AttributeDefinitions": [
         {
             "AttributeName": "id",

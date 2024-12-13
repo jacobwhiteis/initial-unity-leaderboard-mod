@@ -15,7 +15,9 @@ namespace ModNamespace
 
         // API Constants
         public const string ApiKeyHeader = "x-api-key";
-        public const string ApiKey = "ZTp93l4D6XaL3FZVH11Kd36CWbsrB5Y8aACFCfwv";
+        public const string ApiKey1 = "WlRwOTNsNEQ2WGFMM0Za";
+        public const string ApiKey2 = "VkgxMUtkMzZDV2JzckI1W";
+        public const string ApiKey3 = "ThhQUNGQ2Z3dg==";
         public const string NewBaseLeaderboardAddress = "https://api.initialunityreborn.com";
         public const string NewGetGhostAddress = NewBaseLeaderboardAddress + "/getGhost/?id=";
         public const string NewGetRecordsAddress = NewBaseLeaderboardAddress + "/getRecords";

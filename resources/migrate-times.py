@@ -54,7 +54,7 @@ def make_requests(track, layout, car):
     """
     Process records for a specific track, layout, and car combination.
     """
-    records_url = f"{base_url}?track={track}&layout={layout}&condition=-1&car={car}"
+    records_url = f"{base_url}?track={track}&layout={layout}&condition=0&car={car}"
     
     try:
         response = requests.get(records_url)

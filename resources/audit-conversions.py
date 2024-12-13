@@ -25,8 +25,6 @@ def find_missing_files(json_file_path, directory_path, output_file="missing_ids.
         file_path = os.path.join(directory_path, file_name)
 
         if not os.path.exists(file_path):
-            if file_id == 2080441:
-                print(file_path)
             missing_ids.append(file_id)
     
     # Output the missing IDs to a JSON file

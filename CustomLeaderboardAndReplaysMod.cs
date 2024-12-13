@@ -2,10 +2,13 @@
 #pragma warning disable IDE0051
 
 using System.Diagnostics;
+using System.Reflection;
 using HarmonyLib;
 using Il2Cpp;
 using MelonLoader;
+using UnityEngine;
 using UnityEngine.InputSystem;
+using static ModNamespace.CustomLeaderboardAndReplayMod;
 
 // Top of Akagi UH: -281.6374 172.5851 74.3028
 // Top of Usui UH: 635.8738 192.6996 742.4423
@@ -20,13 +23,19 @@ namespace ModNamespace
     public partial class CustomLeaderboardAndReplayMod : MelonMod
     {
 
-    private static readonly HttpClient httpClient = new();
+        private static readonly HttpClient httpClient = new();
         private static readonly Queue<Action> _executionQueue = new();
         private static readonly object _queueLock = new();
 
         // Static field that gets set to assist with uploading replays to leaderboard
         private static string uploadReplayJson;
 
+        public static string BuildAPIKey()
+        {
+
+            var base64EncodedBytes = System.Convert.FromBase64String(Constants.ApiKey1 + Constants.ApiKey2 + Constants.ApiKey3);
+            return System.Text.Encoding.UTF8.GetString(base64EncodedBytes);
+        }
 
         public override void OnInitializeMelon()
         {
@@ -40,12 +49,12 @@ namespace ModNamespace
             if (!Directory.Exists(ghostPath))
             {
                 Directory.CreateDirectory(ghostPath);
-                MelonLogger.Msg($"Directory created: {ghostPath}");
+                Melon<CustomLeaderboardAndReplayMod>.Logger.Msg($"Directory created: {ghostPath}");
             }
             if (!Directory.Exists(replayPath))
             {
                 Directory.CreateDirectory(replayPath);
-                MelonLogger.Msg($"Directory created: {replayPath}");
+                Melon<CustomLeaderboardAndReplayMod>.Logger.Msg($"Directory created: {replayPath}");
             }
 
         }
@@ -75,21 +84,6 @@ namespace ModNamespace
 
         public override void OnUpdate()
         {
-
-            // Check if the 'P' key was pressed this frame
-            if (Keyboard.current != null && Keyboard.current.pKey.wasPressedThisFrame)
-            {
-                MelonLogger.Msg("P pressed");
-                Weather.singleton.changeToNight = true;
-            }
-
-            // Check if the 'O' key was pressed this frame
-            if (Keyboard.current != null && Keyboard.current.oKey.wasPressedThisFrame)
-            {
-                MelonLogger.Msg("O pressed");
-                Weather.singleton.changeToDay = true;
-            }
-
             // Execute any queued actions on the main thread
             lock (_queueLock)
             {
@@ -107,29 +101,7 @@ namespace ModNamespace
                 }
             }
         }
+
     }
-
-
-    // Patching the ProgressTracker to allow teleporting during testing
-    [HarmonyPatch(typeof(ProgressTracker), "Start")]
-    public class ProgressTrackerStartCancel
-    {
-        static bool Prefix() { return false; }
-    }
-
-
-    [HarmonyPatch(typeof(ProgressTracker), "FixedUpdate")]
-    public class ProgressTrackerFixedUpdateCancel
-    {
-        static bool Prefix() { return false; }
-    }
-
-
-    [HarmonyPatch(typeof(ProgressTracker), "Update")]
-    public class ProgressTrackerUpdateCancel
-    {
-        static bool Prefix() { return false; }
-    }
-
 
 }

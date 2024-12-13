@@ -36,10 +36,8 @@ namespace ModNamespace
 
                 string requestUrl = Constants.NewGetRecordsAddress + requestParams;
 
-                MelonLogger.Msg($"request url: {requestUrl}");
-
                 var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
-                request.Headers.Add(Constants.ApiKeyHeader, Constants.ApiKey);
+                request.Headers.Add(Constants.ApiKeyHeader, BuildAPIKey());
 
                 // Send the request
                 var response = await httpClient.SendAsync(request);
@@ -99,7 +97,6 @@ namespace ModNamespace
         {
             public static bool Prefix(GhostManager __instance, bool sameCar)
             {
-                MelonLogger.Msg("In GhostManager getOnlineGhost");
 
                 int requestTrack = EventLoader.singleton.trackIndex;
                 int requestLayout = EventLoader.reverseLayout ? 1 : 0;
@@ -107,7 +104,6 @@ namespace ModNamespace
                 float requestBestTime = EventManager.singleton.lastBestTime > 0 ? EventManager.singleton.lastBestTime : 600f;
                 string recordId = null;
 
-                MelonLogger.Msg("About to start enqueue");
                 try
                 {
                     // Blocking the async call here to fetch recordId
@@ -135,10 +131,7 @@ namespace ModNamespace
                 {
                     try
                     {
-                        MelonLogger.Msg("Trying to load replay");
                         await PatchInitReplayMode.DownloadOnlineReplayJson(ReplayLoader.instance, false);
-                        MelonLogger.Msg("Made it out of the await. Printing replay information in ReplayLoader:");
-                        MelonLogger.Msg($"Replay header: {ReplayLoader.instance.readHeader}");
                         CustomLeaderboardAndReplayMod.Enqueue(async () =>
                         {
                             __instance.insertGhost(ReplayLoader.instance.getLoadedReplay(), true);
@@ -160,8 +153,6 @@ namespace ModNamespace
         {
             public static bool Prefix(GhostManager __instance, string path)
             {
-                MelonLogger.Msg("In GhostManager loadLocalGhost, calling DownloadLocalReplay");
-                MelonLogger.Msg($"Path: {path}");
                 ReplayLoader.replayToLoad = path;
                 MelonLogger.Msg($"Ghost to load: {ReplayLoader.replayToLoad}");
                 PatchInitReplayMode.DownloadLocalReplayJson(ReplayLoader.instance, false);
@@ -261,7 +252,7 @@ namespace ModNamespace
                 string fullPath = Il2Cpp.Utils.getRootFolder() + folder + "/" + replayFileName + ".iuorep";
                 MelonLogger.Msg($"Writing compressed replay to file at {fullPath}");
                 File.WriteAllBytes(fullPath, compressedReplayByteData); // Write as binary
-                MelonLogger.Msg("Done writing compressed replay");
+                MelonLogger.Msg("Done writing replay");
 
                 // Update saving state
                 __instance.saving = false;
@@ -347,15 +338,12 @@ namespace ModNamespace
                 __instance.freeCam.enabled = true;
                 __instance.editorActivator.enabled = true;
 
-                MelonLogger.Msg("About to be there...");
                 if (ReplayLoader.isOnlineReplay)
                 {
                     Task.Run(() => DownloadOnlineReplayJson(__instance, true));
                 }
                 else
                 {
-                    MelonLogger.Msg("in the right place!");
-                    MelonLogger.Msg(ReplayLoader.replayToLoad);
                     DownloadLocalReplayJson(__instance, true);
                 }
 
@@ -385,7 +373,7 @@ namespace ModNamespace
 
                     if (finishReplayInit)
                     {
-                        MelonLogger.Msg("Local replay deserialized successfully, invoking finishReplayInit...");
+                        MelonLogger.Msg("Local replay deserialized successfully");
                         instance.finishReplayInit();
                     }
                 }
@@ -400,37 +388,28 @@ namespace ModNamespace
 
             public static async Task DownloadOnlineReplayJson(ReplayLoader instance, bool finishReplayInit)
             {
-                MelonLogger.Msg("In DownloadOnlineReplayJson");
                 string requestUrl = Constants.NewGetGhostAddress + ReplayLoader.replayToLoad;
                 using (HttpClient httpClient = new())
                 {
                     try
                     {
-                        httpClient.DefaultRequestHeaders.Add(Constants.ApiKeyHeader, Constants.ApiKey);
+                        httpClient.DefaultRequestHeaders.Add(Constants.ApiKeyHeader, BuildAPIKey());
 
                         HttpResponseMessage presignedUrlResponse = await httpClient.GetAsync(requestUrl);
                         if (presignedUrlResponse.IsSuccessStatusCode)
                         {
-                            MelonLogger.Msg("In if statement");
                             string presignedS3Url = await presignedUrlResponse.Content.ReadAsStringAsync();
                             HttpResponseMessage replayResponse = await httpClient.GetAsync(presignedS3Url);
-                            MelonLogger.Msg("Got replayResponse");
                             if (replayResponse.IsSuccessStatusCode) {
-                                MelonLogger.Msg("Was success");
 
                                 // Decompress the response content
                                 byte[] compressedData = await replayResponse.Content.ReadAsByteArrayAsync();
 
-                                MelonLogger.Msg("Waited for ReadAsByteArrayAsync");
                                 byte[] decompressedData = DecompressReplay(compressedData);
-
-                                MelonLogger.Msg("Called DecompressReplay");
 
                                 // Convert the decompressed byte array back to JSON
                                 string responseJson = Encoding.UTF8.GetString(decompressedData);
-                                MelonLogger.Msg("Got json string from decompressedData");
 
-                                //MelonLogger.Msg(responseJson);
 
                                 // Deserialize the JSON
                                 NetworkReplay networkReplay = JsonConvert.DeserializeObject<NetworkReplay>(responseJson);
@@ -441,14 +420,12 @@ namespace ModNamespace
 
                                 if (finishReplayInit)
                                 {
-                                    MelonLogger.Msg("activating finishReplayInit in downloadonlinereplayjson");
                                     // Invoke the finishReplayInit method to proceed with the original flow
                                     // Maybe need to ask enqueue here?
                                     CustomLeaderboardAndReplayMod.Enqueue(async () =>
                                     {
                                         instance.finishReplayInit();
                                     });
-                                    MelonLogger.Msg("Done calling finishReplayInit");
                                 }
                             }
                             else

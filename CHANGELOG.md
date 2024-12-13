@@ -2,15 +2,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [TODO]
-
-
-- Improve website design
-- Find obfuscation method / hide api key
-- Write up a "Game update" process walkthrough
-- Add steam chart-like graph
-- Anti-cheat?
  
-## [Unreleased]
+## [Released]
  
 ## [1.0.1] - 2024-12-08
 
@@ -29,6 +22,7 @@ All notable changes to this project will be documented in this file.
 - Write migration / conversation script for replays
 - Set up cloudflare
 - Set up DNS / buy domain name
+- Hid API key
  
 
 ## [Released]
