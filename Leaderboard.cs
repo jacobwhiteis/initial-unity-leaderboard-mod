@@ -39,7 +39,7 @@ namespace ModNamespace
                 if (name.Length > 0)
                 {
                     // Regex to match hex color codes of the format <#xxxxxx>
-                    string pattern = @"<#[0-9a-fA-F]{6}>";
+                    string pattern = @"<#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?>";
 
                     // Remove all occurrences of hex color codes
                     string cleanedString = Regex.Replace(name, pattern, "");
@@ -146,7 +146,6 @@ namespace ModNamespace
                     return false;
                 }
 
-                // Set the text to "Sending Record..."
                 Uploader.instance.uploadingText.text = "Sending Record...";
                 Uploader.instance.uploadGroup.alpha = 1f;
 
@@ -159,9 +158,13 @@ namespace ModNamespace
                     // Get the sector times
                     float[] sectortimes = TimeAttack.singleton.sectionTimings.ToArray();
                     float sector1 = sectortimes[0];
-                    float sector2 = sectortimes[1];
-                    float sector3 = sectortimes[2];
-                    float sector4 = __instance.raceTimer - sector1 + sector2 + sector3;
+                    float sector2 = sectortimes[1] - sector1;
+                    float sector3 = sectortimes[2] - (sector1 + sector2);
+                    float sector4 = __instance.raceTimer - (sector1 + sector2 + sector3);
+                    MelonLogger.Msg(sector1);
+                    MelonLogger.Msg(sector2);
+                    MelonLogger.Msg(sector3);
+                    MelonLogger.Msg(sector4);
 
                     // Create JSON payload to submit record
                     string jsonPayload = JsonSerializer.Serialize(new
@@ -176,7 +179,9 @@ namespace ModNamespace
                         sector1 = sector1,
                         sector2 = sector2,
                         sector3 = sector3,
-                        sector4 = sector4
+                        sector4 = sector4,
+                        date = DateTime.Now.ToString("M/d/yyyy"),
+                        modVersion = Constants.ModVersion
                     });
 
                     // Call API using custom task queue

@@ -10,7 +10,7 @@ namespace ModNamespace
     {
         // Application Related Constants
         public const string ModName = "Custom Leaderboard & Replay Mod (CLRM)";
-        public const string ModVersion = "1.0.0";
+        public const string ModVersion = "2.1.7";
         public const string ModAuthor = "CouldBeACrow";
 
         // API Constants
