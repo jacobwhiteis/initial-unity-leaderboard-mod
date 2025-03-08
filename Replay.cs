@@ -159,6 +159,8 @@ namespace ModNamespace
                 // Start a coroutine instead of the original method logic
                 MelonCoroutines.Start(GetOnlineGhostCoroutine(__instance, sameCar));
 
+                MelonLogger.Msg("Made it here xd");
+
                 // Return false to skip the original 'getOnlineGhost' method
                 return false;
             }
@@ -246,6 +248,8 @@ namespace ModNamespace
                     MelonLogger.Error("Downloaded replay header is null! Skipping insertGhost.");
                     yield break;
                 }
+
+                MelonLogger.Msg("SHOULD NOT GET HERE!");
 
                 if (ghostReplay.header.cars == null || ghostReplay.header.cars.Count == 0)
                 {

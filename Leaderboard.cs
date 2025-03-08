@@ -237,11 +237,12 @@ namespace ModNamespace
 
             string replayId = Guid.NewGuid().ToString();
             MelonLogger.Msg($"Replay Id: {replayId}");
+            string base64DriverName = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(recordInformation.DriverName));
 
             var s3RequestBody = new
             {
                 filename = replayId,  // Ensure filename is passed correctly
-                drivername = recordInformation.DriverName,
+                drivername = base64DriverName,
                 timing = recordInformation.Timing.ToString(),
                 deviceid = recordInformation.DeviceId,
                 track = recordInformation.Track.ToString(),
@@ -292,7 +293,7 @@ namespace ModNamespace
             };
 
             request.Headers.Add(Constants.ApiKeyHeader, BuildAPIKey());
-            request.Headers.Add($"x-amz-meta-drivername", recordInformation.DriverName);
+            request.Headers.Add($"x-amz-meta-drivername", base64DriverName);
             request.Headers.Add($"x-amz-meta-timing", recordInformation.Timing.ToString());
             request.Headers.Add($"x-amz-meta-deviceid", recordInformation.DeviceId);
             request.Headers.Add($"x-amz-meta-track", recordInformation.Track.ToString());
