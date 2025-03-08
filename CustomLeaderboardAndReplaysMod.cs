@@ -9,12 +9,98 @@ using Il2CppSystem.Runtime.Remoting.Messaging;
 using MelonLoader;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.Networking;
+using System.Collections;
 using static ModNamespace.CustomLeaderboardAndReplayMod;
+using Il2CppTMPro;
+using Il2CppInterop.Runtime.Injection;
+using Il2CppInterop.Runtime;
+using UnityEngine.Events;
+using UnityEngine.UI;
 
 namespace ModNamespace
 {
     public partial class CustomLeaderboardAndReplayMod : MelonMod
     {
+
+        //private GameObject ambienceObject;
+        //private AudioSource audioSource;
+
+        //public override void OnSceneWasLoaded(int buildIndex, string sceneName)
+        //{
+
+        //MelonLogger.Msg("A scene was loaded");
+        //if (sceneName == "Tsuchisaka")
+        //{
+        //    MelonLogger.Msg($"Scene Loaded: {sceneName} (Index: {buildIndex})");
+
+        //    // If an ambience object already exists, don't create a new one
+        //    if (ambienceObject != null)
+        //    {
+        //        MelonLogger.Msg("Ambience already exists. Skipping creation.");
+        //        return;
+        //    }
+
+        //    // Create a new GameObject
+        //    ambienceObject = new GameObject("AmbienceSound");
+        //    UnityEngine.Object.DontDestroyOnLoad(ambienceObject); // Persist across scene loads
+
+        //    MelonLogger.Msg("Created ambient object");
+
+        //    // Add an AudioSource component
+        //    audioSource = ambienceObject.AddComponent<AudioSource>();
+        //    audioSource.loop = true;
+        //    audioSource.playOnAwake = false; // Don't play until the clip is loaded
+        //    audioSource.volume = 0.5f; // Adjust as needed
+        //    audioSource.spatialBlend = 0f; // Fully 2D sound
+
+        //    MelonLogger.Msg("playing audio clip");
+
+        //    // Load the audio asynchronously
+        //    MelonCoroutines.Start(LoadAudioClip($"file://{Application.streamingAssetsPath}/sound.wav"));
+
+        //    MelonLogger.Msg("Created ambient object");
+        //    }
+        //}
+
+        //private IEnumerator LoadAudioClip(string audioPath)
+        //{
+        //    WWW www = new WWW(audioPath);
+        //    yield return www;
+
+        //    if (!string.IsNullOrEmpty(www.error))
+        //    {
+        //        MelonLogger.Warning($"Failed to load ambience sound: {www.error}");
+        //        yield break;
+        //    }
+
+        //    AudioClip clip = www.GetAudioClip(false, true, AudioType.WAV);
+        //    if (clip != null)
+        //    {
+        //        audioSource.clip = clip;
+        //        audioSource.Play();
+        //        MelonLogger.Msg("Ambience sound started.");
+        //        MelonCoroutines.Start(UpdateAudioPosition());
+        //    }
+        //    else
+        //    {
+        //        MelonLogger.Warning("Failed to load AudioClip from path.");
+        //    }
+        //}
+
+        //private IEnumerator UpdateAudioPosition()
+        //{
+        //    while (true)
+        //    {
+        //        if (Camera.main != null)
+        //        {
+        //            ambienceObject.transform.position = Camera.main.transform.position; // Keep at camera position
+        //            ambienceObject.transform.rotation = Camera.main.transform.rotation; // Rotate with the camera
+        //        }
+        //        yield return null;
+        //    }
+        //}
+
 
         private static readonly HttpClient httpClient = new();
         private static readonly Queue<Action> _executionQueue = new();
@@ -22,6 +108,7 @@ namespace ModNamespace
 
         // Static field that gets set to assist with uploading replays to leaderboard
         private static string uploadReplayJson;
+  
 
         public static string BuildAPIKey()
         {
@@ -77,6 +164,7 @@ namespace ModNamespace
 
         public override void OnUpdate()
         {
+
             // Execute any queued actions on the main thread
             lock (_queueLock)
             {
@@ -94,5 +182,7 @@ namespace ModNamespace
                 }
             }
         }
+
     }
+
 }

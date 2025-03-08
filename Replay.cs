@@ -7,49 +7,6 @@ using UnityEngine.Events;
 using MelonLoader;
 using Il2Cpp;
 using static Il2Cpp.ReplayLoader;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 using static ModNamespace.ReplayConversionUtils;
 using static System.Net.Mime.MediaTypeNames;
 using System.Diagnostics;
@@ -58,6 +15,7 @@ using System.Diagnostics.Tracing;
 using static MelonLoader.MelonLogger;
 using System.IO.Compression;
 using System.Text;
+using System.Text.RegularExpressions;
 using Il2CppTelepathy;
 namespace ModNamespace
 {
@@ -135,72 +93,214 @@ namespace ModNamespace
         }
 
 
+        //[HarmonyPatch(typeof(GhostManager), "getOnlineGhost")]
+        //public class PatchGhostManager1
+        //{
+        //    public static bool Prefix(GhostManager __instance, bool sameCar)
+        //    {
+
+        //        int requestTrack = EventLoader.singleton.trackIndex;
+        //        int requestLayout = EventLoader.reverseLayout ? 1 : 0;
+        //        int requestCar = sameCar ? EventLoader.carChoice : -1;
+        //        float requestBestTime = EventManager.singleton.lastBestTime > 0 ? EventManager.singleton.lastBestTime : 600f;
+        //        string recordId = null;
+
+        //        try
+        //        {
+        //            // Blocking the async call here to fetch recordId
+        //            recordId = Task.Run(async () =>
+        //                await getNextLeaderboardRecord(requestTrack, requestLayout, requestCar, requestBestTime)
+        //            ).Result;
+        //        }
+        //        catch (Exception ex)
+        //        {
+        //            Melon<CustomLeaderboardAndReplayMod>.Logger.Error($"Exception occurred while fetching recordId: {ex.Message}");
+        //            return false; // Exit the method if an error occurs
+        //        }
+
+        //        // Check if recordId is null and exit early
+        //        if (recordId == null)
+        //        {
+        //            MelonLogger.Msg("recordId is null. Exiting Prefix method.");
+        //            return false;
+        //        }
+
+
+        //        ReplayLoader.replayToLoad = recordId;
+
+        //        CustomLeaderboardAndReplayMod.Enqueue(async () =>
+        //        {
+        //            try
+        //            {
+        //                await PatchInitReplayMode.DownloadOnlineReplayJson(ReplayLoader.instance, false);
+        //                CustomLeaderboardAndReplayMod.Enqueue(async () =>
+        //                {
+        //                    __instance.insertGhost(ReplayLoader.instance.getLoadedReplay(), true);
+        //                });
+
+        //            }
+        //            catch (Exception ex)
+        //            {
+        //                Melon<CustomLeaderboardAndReplayMod>.Logger.Error($"Exception occurred while downloading replay data: {ex.Message}");
+        //            }
+        //        });
+        //        return false;
+
+        //    }
+        //}
+
+
+        // chat gpt aaaah patch code
         [HarmonyPatch(typeof(GhostManager), "getOnlineGhost")]
         public class PatchGhostManager1
         {
             public static bool Prefix(GhostManager __instance, bool sameCar)
             {
+                // Start a coroutine instead of the original method logic
+                MelonCoroutines.Start(GetOnlineGhostCoroutine(__instance, sameCar));
 
+                // Return false to skip the original 'getOnlineGhost' method
+                return false;
+            }
+
+            private static IEnumerator<string> GetOnlineGhostCoroutine(GhostManager ghostManager, bool sameCar)
+            {
                 int requestTrack = EventLoader.singleton.trackIndex;
                 int requestLayout = EventLoader.reverseLayout ? 1 : 0;
                 int requestCar = sameCar ? EventLoader.carChoice : -1;
-                float requestBestTime = EventManager.singleton.lastBestTime > 0 ? EventManager.singleton.lastBestTime : 600f;
-                string recordId = null;
+                float requestBestTime = (EventManager.singleton.lastBestTime > 0)
+                    ? EventManager.singleton.lastBestTime
+                    : 600f;
 
+                MelonLogger.Msg("here 1");
+                // 1) Fetch `recordId` via async method
+                Task<string> recordTask = null;
                 try
                 {
-                    // Blocking the async call here to fetch recordId
-                    recordId = Task.Run(async () =>
-                        await getNextLeaderboardRecord(requestTrack, requestLayout, requestCar, requestBestTime)
-                    ).Result;
+                    recordTask = getNextLeaderboardRecord(requestTrack, requestLayout, requestCar, requestBestTime);
                 }
                 catch (Exception ex)
                 {
-                    Melon<CustomLeaderboardAndReplayMod>.Logger.Error($"Exception occurred while fetching recordId: {ex.Message}");
-                    return false; // Exit the method if an error occurs
+                    Melon<CustomLeaderboardAndReplayMod>.Logger.Error($"Exception creating recordTask: {ex.Message}");
+                    yield break;  // Stop the coroutine
                 }
 
-                // Check if recordId is null and exit early
+                MelonLogger.Msg("here 2");
+                // 2) Wait until recordTask finishes
+                while (recordTask != null && !recordTask.IsCompleted)
+                    yield return null;
+
+                if (recordTask.IsFaulted)
+                {
+                    // Log the exception and stop
+                    Melon<CustomLeaderboardAndReplayMod>.Logger.Error(
+                        $"Exception while fetching recordId: {recordTask.Exception?.GetBaseException().Message}"
+                    );
+                    yield break;
+                }
+
+                string recordId = recordTask.Result;
                 if (recordId == null)
                 {
-                    MelonLogger.Msg("recordId is null. Exiting Prefix method.");
-                    return false;
+                    MelonLogger.Msg("recordId is null. Exiting method.");
+                    yield break;
                 }
 
-
+                MelonLogger.Msg("here 3");
+                // 3) Set up replay to load
                 ReplayLoader.replayToLoad = recordId;
 
-                CustomLeaderboardAndReplayMod.Enqueue(async () =>
+                // 4) Download the replay file
+                Task downloadTask = null;
+                try
                 {
-                    try
-                    {
-                        await PatchInitReplayMode.DownloadOnlineReplayJson(ReplayLoader.instance, false);
-                        CustomLeaderboardAndReplayMod.Enqueue(async () =>
-                        {
-                            __instance.insertGhost(ReplayLoader.instance.getLoadedReplay(), true);
-                        });
-                    }
-                    catch (Exception ex)
-                    {
-                        Melon<CustomLeaderboardAndReplayMod>.Logger.Error($"Exception occurred while downloading replay data: {ex.Message}");
-                    }
-                });
+                    downloadTask = PatchInitReplayMode.DownloadOnlineReplayJson(ReplayLoader.instance, false);
+                }
+                catch (Exception ex)
+                {
+                    Melon<CustomLeaderboardAndReplayMod>.Logger.Error($"Exception creating downloadTask: {ex.Message}");
+                    yield break;
+                }
 
+                // 5) Wait until the replay download finishes
+                while (downloadTask != null && !downloadTask.IsCompleted)
+                    yield return null;
 
-                return false;
+                if (downloadTask.IsFaulted)
+                {
+                    Melon<CustomLeaderboardAndReplayMod>.Logger.Error(
+                        $"Exception occurred while downloading replay data: {downloadTask.Exception?.GetBaseException().Message}"
+                    );
+                    yield break;
+                }
+                MelonLogger.Msg("here 4");
+
+                Replay ghostReplay = ReplayLoader.instance.getLoadedReplay();
+                if (ghostReplay == null)
+                {
+                    MelonLogger.Msg("Downloaded replay was null! Check for networking / DNS issues. Skipping insertGhost.");
+                    yield break;
+                }
+                if (ghostReplay.header == null)
+                {
+                    MelonLogger.Error("Downloaded replay header is null! Skipping insertGhost.");
+                    yield break;
+                }
+
+                if (ghostReplay.header.cars == null || ghostReplay.header.cars.Count == 0)
+                {
+                    MelonLogger.Error("No cars in the downloaded replay header! Skipping insertGhost.");
+                    yield break;
+                }
+
+                // Potentially also verify each entry in ghostReplay.header.cars...
+                foreach (var carEntry in ghostReplay.header.cars)
+                {
+                    if (carEntry == null || string.IsNullOrEmpty(carEntry.model))
+                    {
+                        MelonLogger.Error("A car entry is null/invalid! Skipping insertGhost.");
+                        yield break;
+                    }
+                }
+
+                // 6) Finally, insert the ghost
+                ghostManager.insertGhost(ReplayLoader.instance.getLoadedReplay(), true);
+                MelonLogger.Msg("here 5");
             }
+
+            // This is whatever async method you had before
+            // that returns Task<string> for the record ID
+            //private static async Task<string> getNextLeaderboardRecord(
+            //    int track, int layout, int car, float bestTime)
+            //{
+            //    // Implementation of your method that fetches `recordId` from server
+            //    // return ...
+            //    await Task.Yield();
+            //    return "dummy_record_id_for_example";
+            //}
         }
+
+
+
 
         [HarmonyPatch(typeof(GhostManager), "loadLocalGhost")]
         public class PatchGhostManager2
         {
             public static bool Prefix(GhostManager __instance, string path)
             {
-                ReplayLoader.replayToLoad = path;
-                MelonLogger.Msg($"Ghost to load: {ReplayLoader.replayToLoad}");
-                PatchInitReplayMode.DownloadLocalReplayJson(ReplayLoader.instance, false);
-                __instance.insertGhost(ReplayLoader.instance.getLoadedReplay(), false);
-                return false;
+                try
+                {
+                    ReplayLoader.replayToLoad = path;
+                    MelonLogger.Msg($"Ghost to load: {ReplayLoader.replayToLoad}");
+                    PatchInitReplayMode.DownloadLocalReplayJson(ReplayLoader.instance, false);
+                    __instance.insertGhost(ReplayLoader.instance.getLoadedReplay(), false);
+                    return false;
+                }
+                catch (Exception e)
+                {
+                    MelonLogger.Msg("Something went wrong while trying to load the local ghost");
+                    return false;
+                }
             }
         }
 
@@ -211,7 +311,8 @@ namespace ModNamespace
             {
                 if (!__instance.animating)
                 {
-                    string arguments = (Il2Cpp.Utils.getRootFolder() + "ModReplays").Replace("/", "\\");
+                    MelonLogger.Msg("Running custom code");
+                    string arguments = (Il2Cpp.Utils.getRootFolder() + "ModReplays\\Local").Replace("/", "\\");
                     Process.Start("explorer.exe", arguments);
                 }
                 return false;
@@ -226,11 +327,11 @@ namespace ModNamespace
             public static bool Prefix(ReplayLoader __instance, bool saveAsGhost, string folder, int replaySlicesCount)
             {
                 // Redirect to different folder
-                if (folder == Constants.OldGhostFolder)
+                if (folder == Constants.OldGhostFolder1 || folder == Constants.OldGhostFolder2)
                 {
                     folder = Constants.NewGhostFolder;
                 }
-                else if (folder == Constants.OldReplayFolder)
+                else if (folder == Constants.OldReplayFolder1 || folder == Constants.OldReplayFolder2)
                 {
                     folder = Constants.NewReplayFolder;
                 }
@@ -320,6 +421,11 @@ namespace ModNamespace
                     fileName = fileName + ReplaySystem.singleton.trackedCars[0].driver + " vs " + ReplaySystem.singleton.trackedCars[1].driver;
                     fileName += " at ";
                     fileName += EventLoader.singleton.localeName;
+                    // Regex to match hex color codes of the format <#xxxxxx>
+                    string colorPattern = @"<#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?>";
+
+                    // Remove all occurrences of hex color codes
+                    fileName = Regex.Replace(fileName, colorPattern, "");
                 }
 
                 if (saveAsGhost)
@@ -432,6 +538,8 @@ namespace ModNamespace
             public static async Task DownloadOnlineReplayJson(ReplayLoader instance, bool finishReplayInit)
             {
                 string requestUrl = Constants.NewGetGhostAddress + ReplayLoader.replayToLoad;
+                MelonLogger.Msg("important msg here:");
+                MelonLogger.Msg("Attempting to send out request in DownloadOnlineReplayJson with replay " + ReplayLoader.replayToLoad);
                 using (HttpClient httpClient = new())
                 {
                     try
@@ -506,13 +614,13 @@ namespace ModNamespace
             {
 
                 // Redirect to different folder
-                if (folder == "Replays\\Local")
+                if (folder == Constants.OldReplayFolder1 || folder == Constants.OldReplayFolder2)
                 {
-                    folder = "ModReplays\\Local";
+                    folder = Constants.NewReplayFolder;
                 }
-                else if (folder == "Ghosts\\Local")
+                else if (folder == Constants.OldGhostFolder1 || folder == Constants.OldGhostFolder2)
                 {
-                    folder = "ModGhosts\\Local";
+                    folder = Constants.NewGhostFolder;
                 }
 
                 ReplayLoader.checkForFolder(folder);

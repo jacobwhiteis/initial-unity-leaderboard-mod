@@ -17,8 +17,7 @@ namespace ModNamespace
         {
             Il2Cpp.ReplayLoader.ReplayHeader replayHeader = new(
                 dto.version,
-                Il2CppSystem.DateTime.Now,
-                //new Il2CppSystem.DateTime(dto.date.Ticks), // Using compatible DateTime constructor
+                new Il2CppSystem.DateTime(dto.date.Ticks), // Using compatible DateTime constructor
                 dto.isBattle,
                 dto.replayDuration,
                 dto.track,
